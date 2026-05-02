@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from collectors import RedditCollector
+from collectors import HNCollector
 from storage import (
     save_raw_posts,
     load_raw_posts,
@@ -15,7 +15,6 @@ from storage import (
 )
 from processors import clean_posts, extract_pain_points, cluster_pain_points
 from generators import generate_ideas, format_ideas_for_agent
-from config import SUBREDDITS
 
 
 def run_collection():
@@ -23,8 +22,8 @@ def run_collection():
     print(f"Collection run started at {datetime.now().isoformat()}")
     print(f"{'=' * 50}\n")
 
-    collector = RedditCollector(use_praw=False)
-    posts = collector.collect_all(SUBREDDITS)
+    collector = HNCollector()
+    posts = collector.collect_all()
 
     existing_ids = get_all_post_ids()
     new_posts = [p for p in posts if p["id"] not in existing_ids]
@@ -32,7 +31,7 @@ def run_collection():
     print(f"\nNew posts collected: {len(new_posts)}")
 
     if new_posts:
-        save_raw_posts(new_posts, "reddit")
+        save_raw_posts(new_posts, "hackernews")
 
     return len(new_posts)
 
@@ -83,14 +82,25 @@ def run():
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--watch", action="store_true", help="Run continuously with scheduler"
+    )
+    args = parser.parse_args()
+
     print("Metis - Market Intelligence System")
-    print("Running initial collection and processing...\n")
+    print("Running collection and processing...\n")
 
     run()
 
-    print("\nSetting up scheduled runs...")
-    schedule.every(6).hours.do(run)
+    if args.watch:
+        print("\nSetting up scheduled runs...")
+        schedule.every(6).hours.do(run)
 
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    else:
+        print("\nDone. Run with --watch for continuous operation.")

@@ -60,3 +60,6 @@ PAIN_KEYWORDS = [
     " Alternatives ",
     "vs ",
 ]
+
+HN_API_BASE = "https://hacker-news.firebaseio.com/v0"
+HN_SOURCES = ["top", "new"]
