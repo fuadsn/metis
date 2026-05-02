@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+collectors/__init__.py
+collectors/hackernews.py
+collectors/reddit.py
+generators/__init__.py
+generators/idea_generator.py
+metis.egg-info/PKG-INFO
+metis.egg-info/SOURCES.txt
+metis.egg-info/dependency_links.txt
+metis.egg-info/entry_points.txt
+metis.egg-info/requires.txt
+metis.egg-info/top_level.txt
+processors/__init__.py
+processors/cleaner.py
+processors/clusterer.py
+storage/__init__.py

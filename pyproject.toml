@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metis"
+version = "0.1.0"
+description = "Market Intelligence System - Generate product ideas from forum pain points"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "schedule>=1.2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["collectors*", "storage*", "processors*", "generators*", "cli*"]
+
+[project.scripts]
+metis = "cli:main"
