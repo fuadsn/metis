@@ -62,4 +62,5 @@ PAIN_KEYWORDS = [
 ]
 
 HN_API_BASE = "https://hacker-news.firebaseio.com/v0"
-HN_SOURCES = ["top", "new"]
+HN_SOURCES = ["top", "new", "best", "ask", "show"]
+HN_POSTS_PER_SOURCE = 30

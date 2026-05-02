@@ -1,7 +1,7 @@
 import httpx
-import time
+import asyncio
 from typing import List, Dict, Optional
-from config import HN_API_BASE, HN_SOURCES
+from config import HN_API_BASE, HN_SOURCES, HN_POSTS_PER_SOURCE
 
 
 class HNCollector:
@@ -9,17 +9,23 @@ class HNCollector:
         self.base_url = HN_API_BASE
 
     def collect_all(self) -> List[Dict]:
-        all_items = []
+        return asyncio.run(self._collect_all_async())
 
-        for source in HN_SOURCES:
-            print(f"Collecting from {source}...")
-            items = self._collect_source(source)
-            all_items.extend(items)
-            print(f"  Collected {len(items)} items")
+    async def _collect_all_async(self) -> List[Dict]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            all_items = []
 
-        return all_items
+            for source in HN_SOURCES:
+                print(f"Collecting from {source}...")
+                items = await self._collect_source(client, source)
+                all_items.extend(items)
+                print(f"  Collected {len(items)} items")
 
-    def _collect_source(self, source: str) -> List[Dict]:
+            return all_items
+
+    async def _collect_source(
+        self, client: httpx.AsyncClient, source: str
+    ) -> List[Dict]:
         endpoint_map = {
             "top": "topstories",
             "new": "newstories",
@@ -31,28 +37,26 @@ class HNCollector:
         endpoint = endpoint_map.get(source, "topstories")
 
         try:
-            response = httpx.get(f"{self.base_url}/{endpoint}.json", timeout=30)
+            response = await client.get(f"{self.base_url}/{endpoint}.json")
             response.raise_for_status()
             story_ids = response.json()
 
-            story_ids = story_ids[:20]
+            story_ids = story_ids[:HN_POSTS_PER_SOURCE]
 
-            stories = []
-            for story_id in story_ids:
-                story = self._fetch_story(story_id)
-                if story:
-                    stories.append(story)
-                time.sleep(0.1)
+            tasks = [self._fetch_story(client, story_id) for story_id in story_ids]
+            stories = await asyncio.gather(*tasks)
 
-            return stories
+            return [s for s in stories if s is not None]
 
         except Exception as e:
             print(f"Error collecting {source}: {e}")
             return []
 
-    def _fetch_story(self, story_id: int) -> Optional[Dict]:
+    async def _fetch_story(
+        self, client: httpx.AsyncClient, story_id: int
+    ) -> Optional[Dict]:
         try:
-            response = httpx.get(f"{self.base_url}/item/{story_id}.json", timeout=10)
+            response = await client.get(f"{self.base_url}/item/{story_id}.json")
             response.raise_for_status()
             story = response.json()
 
