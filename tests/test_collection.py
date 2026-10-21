@@ -1,14 +1,16 @@
 import json
 from datetime import datetime, timezone
 from urllib.parse import parse_qs
+
 import httpx
 import pytest
+
 from collectors import COLLECTORS
 from collectors.base import CollectionResult
 from config import Settings
 from models import normalize_post
 from pipeline import collect_posts, run_analysis
-from processors import clean_posts, extract_pain_points, cluster_pain_points
+from processors import clean_posts, cluster_pain_points, extract_pain_points
 from storage import Store
 
 NOW = datetime.now(timezone.utc).timestamp()
@@ -532,8 +534,9 @@ def test_malformed_response_is_an_error():
 def test_cli_logging_does_not_expose_query_string_credentials(
     caplog, capsys, monkeypatch, tmp_path
 ):
-    import cli
     import logging
+
+    import cli
     import pipeline
 
     key = "test-sensitive-api-key"

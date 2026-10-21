@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from math import ceil
-from collectors.base import Collector, CollectionError, RateLimited, StopCollection
+
+from collectors.base import CollectionError, Collector, RateLimited, StopCollection
 from models import plain_text
 
 

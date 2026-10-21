@@ -1,11 +1,11 @@
 import json
 import os
-from pathlib import Path
 import shutil
 import sqlite3
 import subprocess
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 import schedule

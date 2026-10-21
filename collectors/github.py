@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from math import ceil
-from collectors.base import Collector, CollectionError, StopCollection
+
+from collectors.base import CollectionError, Collector, StopCollection
 
 
 class GitHubCollector(Collector):

@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent

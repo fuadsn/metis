@@ -33,5 +33,11 @@ include = ["collectors*", "storage*", "processors*", "generators*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
 [project.scripts]
 metis = "cli:main"

@@ -3,10 +3,11 @@
 import logging
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+
 from collectors import COLLECTORS
-from config import Settings, SOURCE_NAMES
+from config import SOURCE_NAMES, Settings
 from generators import generate_ideas
-from processors import clean_posts, extract_pain_points, cluster_pain_points
+from processors import clean_posts, cluster_pain_points, extract_pain_points
 from storage import Store
 
 logger = logging.getLogger(__name__)

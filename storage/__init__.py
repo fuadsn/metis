@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
 from config import DATA_DIR
 from models import normalize_post, timestamp, unique_posts
 

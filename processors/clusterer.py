@@ -1,6 +1,6 @@
-from typing import List, Dict
-from collections import defaultdict
 import re
+from collections import defaultdict
+from typing import Dict, List
 
 
 def cluster_pain_points(pain_points: List[Dict]) -> List[Dict]:

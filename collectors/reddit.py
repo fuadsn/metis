@@ -1,7 +1,8 @@
+import re
 from datetime import datetime, timedelta, timezone
 from math import ceil
-import re
-from collectors.base import Collector, CollectionError, StopCollection
+
+from collectors.base import CollectionError, Collector, StopCollection
 
 
 class RedditCollector(Collector):

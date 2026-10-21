@@ -3,7 +3,9 @@
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
 import httpx
+
 from config import Settings
 from models import normalize_post, unique_posts
 

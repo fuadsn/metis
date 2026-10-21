@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
-from collectors.base import Collector, CollectionError, StopCollection
+
+from collectors.base import CollectionError, Collector, StopCollection
 from models import plain_text
 
 

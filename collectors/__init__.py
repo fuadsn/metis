@@ -1,8 +1,8 @@
-from .reddit import RedditCollector
-from .hackernews import HNCollector
 from .github import GitHubCollector
-from .x import XCollector
+from .hackernews import HNCollector
+from .reddit import RedditCollector
 from .stackexchange import StackExchangeCollector
+from .x import XCollector
 
 COLLECTORS = {
     "hackernews": HNCollector,

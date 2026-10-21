@@ -1,5 +1,6 @@
 import re
-from typing import List, Dict
+from typing import Dict, List
+
 from config import PAIN_KEYWORDS
 from models import unique_posts
 

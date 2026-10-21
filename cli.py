@@ -3,7 +3,8 @@ import json
 import logging
 import sqlite3
 import sys
-from config import Settings, SOURCE_NAMES
+
+from config import SOURCE_NAMES, Settings
 from models import timestamp
 from pipeline import collect_posts, run_analysis, run_pipeline, source_status
 from storage import Store

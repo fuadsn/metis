@@ -5,7 +5,9 @@ import json
 import logging
 import sys
 import time
+
 import schedule
+
 from cli import add_collection_arguments, configure_logging, run_safely, settings_for
 from config import COLLECTION_INTERVAL_HOURS
 from pipeline import run_pipeline

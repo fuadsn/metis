@@ -3,10 +3,10 @@
 import argparse
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import venv
+from pathlib import Path
 
 
 def main():

@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Dict, List
 
 
 def generate_ideas(clusters: List[Dict]) -> List[Dict]:
