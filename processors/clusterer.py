@@ -1,5 +1,6 @@
 from typing import List, Dict
 from collections import defaultdict
+import re
 
 
 def cluster_pain_points(pain_points: List[Dict]) -> List[Dict]:
@@ -66,8 +67,8 @@ def cluster_pain_points(pain_points: List[Dict]) -> List[Dict]:
 
         cluster_key = "other"
         for kw in keywords:
-            if kw in text:
-                cluster_key = kw
+            if re.search(r"(?<!\w)" + re.escape(kw.lower()) + r"(?!\w)", text):
+                cluster_key = kw.lower()
                 break
 
         keyword_clusters[cluster_key].append(pp)
@@ -82,7 +83,13 @@ def cluster_pain_points(pain_points: List[Dict]) -> List[Dict]:
                     "pain_points": points,
                     "count": len(points),
                     "avg_score": sum(p.get("score", 0) for p in points) / len(points),
-                    "subreddits": list(set(p.get("subreddit") for p in points)),
+                    "subreddits": sorted(
+                        {p["subreddit"] for p in points if p.get("subreddit")}
+                    ),
+                    "sources": sorted(set(p["source"] for p in points)),
+                    "evidence_urls": list(
+                        dict.fromkeys(p["url"] for p in points if p.get("url"))
+                    ),
                     "sentiments": _aggregate_sentiments(points),
                 }
             )

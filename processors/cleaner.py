@@ -1,100 +1,119 @@
 import re
 from typing import List, Dict
 from config import PAIN_KEYWORDS
+from models import unique_posts
 
 
 def clean_posts(posts: List[Dict]) -> List[Dict]:
     cleaned = []
-
-    for post in posts:
-        title = post.get("title", "")
-        selftext = post.get("selftext", "")
-
-        if not title or len(title) < 20:
+    for post in unique_posts(posts):
+        text = "\n".join(part for part in (post["title"], post["body"]) if part).strip()
+        if len(text) < 20:
             continue
-
-        text = f"{title} {selftext}".strip()
-
         cleaned.append(
             {
-                "id": post.get("id"),
-                "title": title,
-                "selftext": selftext[:2000] if selftext else "",
+                **post,
                 "text": text,
-                "subreddit": post.get("subreddit"),
-                "score": post.get("score", 0),
-                "num_comments": post.get("num_comments", 0),
-                "created_utc": post.get("created_utc"),
-                "url": post.get("url", ""),
-                "author": post.get("author", "[deleted]"),
+                "selftext": post["body"],
+                "subreddit": post["community"],
             }
         )
-
     return cleaned
 
 
+def _matches(phrase, text):
+    return (
+        re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", text, re.IGNORECASE)
+        is not None
+    )
+
+
 def extract_pain_points(posts: List[Dict]) -> List[Dict]:
-    pain_points = []
-
-    for post in posts:
-        text = post.get("text", "").lower()
-        title = post.get("title", "")
-
-        matched_keywords = [kw for kw in PAIN_KEYWORDS if kw.lower() in text]
-
-        if matched_keywords or _is_likely_pain(post):
-            sentiment = _assess_sentiment(text)
-
-            pain_points.append(
-                {
-                    "id": f"pp_{post.get('id')}",
-                    "post_id": post.get("id"),
-                    "title": title,
-                    "text": text,
-                    "subreddit": post.get("subreddit"),
-                    "score": post.get("score", 0),
-                    "matched_keywords": matched_keywords,
-                    "sentiment": sentiment,
-                    "is_selftext": bool(post.get("selftext")),
-                }
-            )
-
-    return pain_points
-
-
-def _is_likely_pain(post: Dict) -> bool:
-    score = post.get("score", 0)
-    text = post.get("text", "")
-
-    if score >= 10:
-        return True
-
-    question_indicators = [
-        "why is",
-        "why does",
+    points = []
+    questions = [
         "how do i",
-        "how can",
-        "can someone",
-        "anyone else",
-        "is there a",
-        "does anyone",
+        "how can i",
+        "does anyone know",
+        "can someone recommend",
         "help me",
     ]
-
-    for indicator in question_indicators:
-        if indicator in text.lower():
-            return True
-
-    return False
+    for post in posts:
+        text = post["text"]
+        matched = [phrase for phrase in PAIN_KEYWORDS if _matches(phrase, text)]
+        labels = [
+            str(label).lower() for label in post.get("metadata", {}).get("labels", [])
+        ]
+        feature_request = any(
+            label in {"enhancement", "feature request", "feature-request"}
+            for label in labels
+        )
+        if (
+            not matched
+            and not feature_request
+            and not any(_matches(q, text) for q in questions)
+        ):
+            continue
+        lower = text.lower()
+        buying = any(
+            _matches(phrase, lower)
+            for phrase in ["would pay", "willing to pay", "budget for"]
+        )
+        alternatives = any(
+            _matches(phrase, lower)
+            for phrase in ["alternative to", "alternatives to", "looking for"]
+        )
+        lead_type = (
+            "buying_signal"
+            if buying
+            else "alternative_search"
+            if alternatives
+            else "workflow_pain"
+            if matched or feature_request
+            else "support_question"
+        )
+        # Transparent heuristic priority, not a likelihood of purchase.
+        priority = min(
+            100,
+            20
+            + 10 * min(len(matched), 4)
+            + 30 * buying
+            + 10 * alternatives
+            + 10 * feature_request,
+        )
+        sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+        excerpt = next(
+            (
+                sentence
+                for sentence in sentences
+                if any(_matches(kw, sentence) for kw in matched)
+            ),
+            text,
+        )
+        points.append(
+            {
+                **post,
+                "id": "pp_" + post["id"],
+                "post_id": post["id"],
+                "matched_keywords": matched,
+                "sentiment": _assess_sentiment(lower),
+                "is_selftext": bool(post["body"]),
+                "lead_type": lead_type,
+                "priority_score": priority,
+                "evidence_excerpt": excerpt[:600],
+                "scoring_method": "keyword_heuristic_v1",
+            }
+        )
+    return sorted(
+        points, key=lambda point: (-point["priority_score"], point["post_id"])
+    )
 
 
 def _assess_sentiment(text: str) -> str:
-    desperate_words = ["urgent", "desperate", "can't", "impossible", "frustrated"]
-    annoyed_words = ["annoying", "tired", "sick", "broken", "stupid"]
-
-    if any(w in text for w in desperate_words):
+    if any(
+        _matches(word, text)
+        for word in ["urgent", "desperate", "impossible", "frustrated"]
+    ):
         return "desperate"
-    elif any(w in text for w in annoyed_words):
+    if any(_matches(word, text) for word in ["annoying", "tired", "sick", "broken"]):
         return "frustrated"
-    else:
-        return "curious"
+    return "curious"

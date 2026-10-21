@@ -1,158 +1,148 @@
 import argparse
 import json
+import logging
+import sqlite3
 import sys
-from datetime import datetime
-
-from collectors import HNCollector
-from storage import (
-    save_raw_posts,
-    load_raw_posts,
-    get_all_post_ids,
-    save_processed_data,
-    load_processed_data,
-)
-from processors import clean_posts, extract_pain_points, cluster_pain_points
-from generators import generate_ideas
+from config import Settings, SOURCE_NAMES
+from models import timestamp
+from pipeline import collect_posts, run_analysis, run_pipeline, source_status
+from storage import Store
 
 
-def cmd_collect():
-    collector = HNCollector()
-    posts = collector.collect_all()
+def configure_logging():
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(message)s")
+    # HTTPX logs complete request URLs at INFO, including query-string API keys.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-    existing_ids = get_all_post_ids()
-    new_posts = [p for p in posts if p["id"] not in existing_ids]
 
-    if new_posts:
-        save_raw_posts(new_posts, "hackernews")
+def bounded_int(minimum, maximum):
+    def parse(value):
+        result = int(value)
+        if not minimum <= result <= maximum:
+            raise argparse.ArgumentTypeError(f"must be between {minimum} and {maximum}")
+        return result
 
-    print(
-        json.dumps(
-            {
-                "status": "success",
-                "collected": len(posts),
-                "new": len(new_posts),
-                "timestamp": datetime.now().isoformat(),
-            }
+    return parse
+
+
+def add_collection_arguments(parser, include_limit=True):
+    parser.add_argument(
+        "--sources", help="Comma-separated sources: " + ",".join(SOURCE_NAMES)
+    )
+    if include_limit:
+        parser.add_argument(
+            "--limit",
+            type=bounded_int(1, 500),
+            default=50,
+            help="Maximum collected posts per source (default: 50; X minimum: 10)",
         )
+    parser.add_argument(
+        "--days",
+        type=bounded_int(1, 365),
+        default=30,
+        help="Lookback window (default: 30; X recent search capped at 7)",
     )
 
-    return 0
+
+def settings_for(sources=None):
+    if sources is None:
+        return Settings()
+    return Settings(
+        sources=[source.strip() for source in sources.split(",") if source.strip()]
+    )
 
 
-def cmd_analyze():
-    all_posts = load_raw_posts(limit=10)
-
-    cleaned = clean_posts(all_posts)
-    pain_points = extract_pain_points(cleaned)
-    clusters = cluster_pain_points(pain_points)
-    ideas = generate_ideas(clusters)
-
-    result = {
-        "status": "success",
-        "processed_at": datetime.now().isoformat(),
-        "posts_processed": len(all_posts),
-        "pain_points_count": len(pain_points),
-        "clusters_count": len(clusters),
-        "ideas_count": len(ideas),
-        "clusters": clusters,
-        "ideas": ideas,
-    }
-
-    save_processed_data(result, "latest_analysis.json")
-
-    print(json.dumps(result, indent=2))
-
-    return 0
-
-
-def cmd_ideas():
-    data = load_processed_data("latest_analysis.json")
-
+def latest(kind, limit=20, source=None, store=None):
+    if limit < 1:
+        raise ValueError("limit must be positive")
+    store = store or Store()
+    data = store.load_result("latest_analysis.json")
     if not data:
-        print(
-            json.dumps(
-                {
-                    "status": "error",
-                    "message": "No analysis found. Run 'metis run' first.",
-                }
-            )
-        )
-        return 1
-
-    print(
-        json.dumps(
-            {
-                "status": "success",
-                "ideas": data.get("ideas", []),
-                "clusters": data.get("clusters", []),
-            },
-            indent=2,
-        )
-    )
-
-    return 0
-
-
-def cmd_run():
-    collector = HNCollector()
-    posts = collector.collect_all()
-
-    existing_ids = get_all_post_ids()
-    new_posts = [p for p in posts if p["id"] not in existing_ids]
-
-    if new_posts:
-        save_raw_posts(new_posts, "hackernews")
-
-    all_posts = load_raw_posts(limit=10)
-    cleaned = clean_posts(all_posts)
-    pain_points = extract_pain_points(cleaned)
-    clusters = cluster_pain_points(pain_points)
-    ideas = generate_ideas(clusters)
-
-    result = {
+        return {
+            "status": "error",
+            "message": "No analysis found. Run 'metis run' first.",
+        }
+    if kind == "leads" and data.get("schema_version") != 2:
+        return {
+            "status": "error",
+            "message": "Run 'metis analyze' to upgrade the saved analysis.",
+        }
+    items = data.get(kind, [])
+    if source:
+        items = [
+            item
+            for item in items
+            if item.get("source") == source or source in item.get("sources", [])
+        ]
+    collection = store.load_result("latest_collection.json")
+    return {
         "status": "success",
-        "collected": len(posts),
-        "new_posts": len(new_posts),
-        "posts_processed": len(all_posts),
-        "pain_points": len(pain_points),
-        "clusters": clusters,
-        "ideas": ideas,
-        "timestamp": datetime.now().isoformat(),
+        "processed_at": data.get("processed_at"),
+        "selected_sources": data.get("selected_sources"),
+        "window_days": data.get("window_days"),
+        "analysis_status": data.get("status", "unknown"),
+        "latest_collection": collection,
+        "collection_newer_than_analysis": bool(
+            collection
+            and (timestamp(collection.get("timestamp")) or 0)
+            > (timestamp(data.get("processed_at")) or 0)
+        ),
+        kind: items[:limit],
     }
 
-    save_processed_data(result, "latest_analysis.json")
 
-    print(json.dumps(result, indent=2))
+def run_safely(action):
+    """Keep expected configuration/storage failures consistent across entry points."""
+    try:
+        return action()
+    except (ValueError, OSError, sqlite3.Error) as exc:
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Unable to read or write the Metis data directory"
+        )
+        return {"status": "error", "message": message}
 
-    return 0
 
-
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="metis", description="Metis - Market Intelligence System"
+        prog="metis", description="Startup and developer-tool opportunity research"
     )
-
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    subparsers.add_parser("collect", help="Collect new posts from HN")
-    subparsers.add_parser("analyze", help="Analyze stored posts")
-    subparsers.add_parser("ideas", help="Output latest product ideas")
-    subparsers.add_parser("run", help="Full pipeline: collect + analyze")
-
-    args = parser.parse_args()
-
+    subparsers = parser.add_subparsers(dest="command")
+    for name in ("collect", "analyze", "run"):
+        add_collection_arguments(
+            subparsers.add_parser(name), include_limit=name != "analyze"
+        )
+    status_parser = subparsers.add_parser(
+        "sources", help="Show configuration readiness without network calls"
+    )
+    status_parser.add_argument("--sources")
+    for name in ("leads", "ideas", "clusters"):
+        command = subparsers.add_parser(name)
+        command.add_argument("--limit", type=bounded_int(1, 1000), default=20)
+        command.add_argument("--source", choices=SOURCE_NAMES)
+    args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         return 0
+    configure_logging()
 
-    commands = {
-        "collect": cmd_collect,
-        "analyze": cmd_analyze,
-        "ideas": cmd_ideas,
-        "run": cmd_run,
-    }
+    def execute():
+        if args.command in {"leads", "ideas", "clusters"}:
+            return latest(args.command, args.limit, args.source)
+        settings = settings_for(args.sources)
+        if args.command == "sources":
+            return source_status(settings)
+        if args.command == "collect":
+            return collect_posts(settings, limit=args.limit, days=args.days)
+        if args.command == "analyze":
+            return run_analysis(settings, days=args.days)
+        return run_pipeline(settings, limit=args.limit, days=args.days)
 
-    return commands[args.command]()
+    result = run_safely(execute)
+    print(json.dumps(result, indent=2))
+    return {"success": 0, "partial": 2, "error": 1}.get(result["status"], 1)
 
 
 if __name__ == "__main__":

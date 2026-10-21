@@ -5,3 +5,9 @@ __pycache__/
 data/
 *.log
 .DS_Store
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/

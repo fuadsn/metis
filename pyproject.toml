@@ -4,19 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metis"
-version = "0.1.0"
-description = "Market Intelligence System - Generate product ideas from forum pain points"
+version = "0.2.0"
+description = "Find startup and developer-tool opportunities across public communities"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "httpx>=0.27.0",
+    "httpx>=0.27.0,<1",
     "python-dotenv>=1.0.0",
-    "pydantic>=2.0.0",
-    "schedule>=1.2.0",
+    "pydantic>=2.0.0,<3",
+    "schedule>=1.2.0,<2",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7,<9"]
+dev = ["pytest>=7,<9", "ruff>=0.11,<1", "build>=1,<2"]
+
+[project.urls]
+Repository = "https://github.com/fuadsn/metis"
+Issues = "https://github.com/fuadsn/metis/issues"
+
+[tool.setuptools]
+py-modules = ["cli", "config", "models", "pipeline", "main", "mcp_server", "mcp_simple"]
+
 [tool.setuptools.packages.find]
-include = ["collectors*", "storage*", "processors*", "generators*", "cli*"]
+include = ["collectors*", "storage*", "processors*", "generators*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [project.scripts]
 metis = "cli:main"

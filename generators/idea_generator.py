@@ -113,6 +113,10 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
                     "market_difficulty": market_diff,
                     "demand_signal": demand_signal,
                     "evidence_count": count,
+                    "sources": cluster.get("sources", []),
+                    "evidence_urls": cluster.get("evidence_urls", []),
+                    "scoring_method": "fixed_template",
+                    "hypothesis": True,
                 }
             )
 
