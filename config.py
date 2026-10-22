@@ -26,6 +26,8 @@ DATA_DIR = Path(os.getenv("METIS_DATA_DIR", str(DEFAULT_DATA_DIR))).expanduser()
 RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 COLLECTION_INTERVAL_HOURS = 6
+DEFAULT_WINDOW_DAYS = 180
+ANALYSIS_VERSION = 4
 SOURCE_NAMES = ("hackernews", "reddit", "x", "github", "stackexchange")
 DEFAULT_SOURCES = ("hackernews", "github", "stackexchange")
 PAIN_KEYWORDS = [
@@ -125,6 +127,18 @@ class Settings:
             ],
         )
     )
+    hackernews_queries: List[str] = field(
+        default_factory=lambda: queries_env(
+            "METIS_HACKERNEWS_QUERIES",
+            [
+                '"looking for" "tool"',
+                '"looking for" "software"',
+                '"manually" "every"',
+                '"I would pay"',
+                '"recommend" "tool"',
+            ],
+        )
+    )
     x_queries: List[str] = field(
         default_factory=lambda: queries_env(
             "METIS_X_QUERIES",
@@ -135,12 +149,12 @@ class Settings:
     )
     stackexchange_sites: List[str] = field(
         default_factory=lambda: csv_env(
-            "METIS_STACKEXCHANGE_SITES", "stackoverflow,serverfault"
+            "METIS_STACKEXCHANGE_SITES", "softwarerecs,serverfault,stackoverflow"
         )
     )
     stackexchange_queries: List[str] = field(
         default_factory=lambda: queries_env(
-            "METIS_STACKEXCHANGE_QUERIES", ["deployment workaround", "manual workflow"]
+            "METIS_STACKEXCHANGE_QUERIES", ["workflow", "alternative"]
         )
     )
 
@@ -158,7 +172,12 @@ class Settings:
         self.sources = list(dict.fromkeys(self.sources))
         if not self.sources:
             raise ValueError("At least one source is required")
-        for name in ("github_queries", "x_queries", "stackexchange_queries"):
+        for name in (
+            "github_queries",
+            "hackernews_queries",
+            "x_queries",
+            "stackexchange_queries",
+        ):
             values = getattr(self, name)
             if not values or not all(
                 isinstance(value, str) and value.strip() for value in values

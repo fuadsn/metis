@@ -17,6 +17,7 @@ def settings(**overrides):
     return Settings(
         **{
             "sources": ["github"],
+            "hackernews_queries": ["workflow"],
             "github_queries": ["workflow"],
             "stackexchange_sites": ["stackoverflow"],
             "stackexchange_queries": ["workflow"],
@@ -46,8 +47,23 @@ def test_hn_fetches_bounded_top_level_comments_only_on_promising_threads():
 
     def handler(request):
         requests.append(request.url.path)
-        if "stories.json" in request.url.path:
-            return httpx.Response(200, json=[1, 2])
+        if request.url.host == "hn.algolia.com":
+            return httpx.Response(
+                200,
+                json={
+                    "hits": []
+                    if request.url.params["tags"] == "comment"
+                    else [
+                        {
+                            "objectID": "1",
+                            "created_at_i": int(NOW),
+                            "title": "Ask HN: Deployment workflow",
+                            "story_text": "We would pay for a deployment tool.",
+                            "num_comments": 20,
+                        }
+                    ]
+                },
+            )
         item = int(request.url.path.split("/")[-1].split(".")[0])
         if item < 100:
             return httpx.Response(
@@ -81,11 +97,11 @@ def test_hn_fetches_bounded_top_level_comments_only_on_promising_threads():
         )
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = COLLECTORS["hackernews"](settings(), client).collect(limit=2)
+        result = COLLECTORS["hackernews"](settings(), client).collect(limit=2, days=30)
     assert result.status == "success"
-    assert result.comment_requests == 2
+    assert result.comment_requests == 3
     assert result.comment_threads == 1
-    assert len(requests) == 9
+    assert len(requests) == 5
     assert len(result.comments) == 1
     comment = result.comments[0]
     assert comment["id"] == "hackernews:comment:102"
@@ -196,7 +212,9 @@ def test_stackexchange_unknown_comment_count_and_backoff_keep_attributed_comment
         )
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = COLLECTORS["stackexchange"](settings(), client).collect(limit=1)
+        result = COLLECTORS["stackexchange"](settings(), client).collect(
+            limit=1, days=30
+        )
     assert result.status == "partial"
     assert len(requests) == 2
     comment = result.comments[0]
@@ -248,13 +266,29 @@ def test_pipeline_persists_comments_separately_and_repeat_runs_do_not_duplicate(
     assert store.counts() == {"github": 2}
     result = run_analysis(settings(), store)
     assert result["comments_processed"] == 1
-    assert len(result["leads"]) == 2
+    assert result["leads"] == []
+    assert len(result["supporting_evidence"]) == 2
 
 
 def test_relevant_ask_hn_gets_bounded_exploratory_comments_without_root_intent():
     def handler(request):
-        if "stories.json" in request.url.path:
-            return httpx.Response(200, json=[1])
+        if request.url.host == "hn.algolia.com":
+            return httpx.Response(
+                200,
+                json={
+                    "hits": []
+                    if request.url.params["tags"] == "comment"
+                    else [
+                        {
+                            "objectID": "1",
+                            "created_at_i": int(NOW),
+                            "title": "Ask HN: How has your software team adapted its process?",
+                            "story_text": "I am interested in your experiences.",
+                            "num_comments": 3,
+                        }
+                    ]
+                },
+            )
         if request.url.path.endswith("/1.json"):
             return httpx.Response(
                 200,
@@ -281,7 +315,7 @@ def test_relevant_ask_hn_gets_bounded_exploratory_comments_without_root_intent()
         )
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = COLLECTORS["hackernews"](settings(), client).collect(limit=1)
+        result = COLLECTORS["hackernews"](settings(), client).collect(limit=1, days=30)
     assert result.status == "success"
     assert result.comment_threads == 1
     assert len(result.comments) == 1
@@ -293,8 +327,23 @@ def test_hn_comment_retries_stay_inside_extra_request_budget(monkeypatch):
 
     def handler(request):
         calls.append(request.url.path)
-        if "stories.json" in request.url.path:
-            return httpx.Response(200, json=[1])
+        if request.url.host == "hn.algolia.com":
+            return httpx.Response(
+                200,
+                json={
+                    "hits": []
+                    if request.url.params["tags"] == "comment"
+                    else [
+                        {
+                            "objectID": "1",
+                            "created_at_i": int(NOW),
+                            "title": "Ask HN: How has your software team adapted its process?",
+                            "story_text": "I am interested in your experiences.",
+                            "num_comments": 3,
+                        }
+                    ]
+                },
+            )
         if request.url.path.endswith("/1.json"):
             return httpx.Response(
                 200,
@@ -312,8 +361,8 @@ def test_hn_comment_retries_stay_inside_extra_request_budget(monkeypatch):
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = COLLECTORS["hackernews"](
             settings(comments_per_thread=2), client
-        ).collect(limit=1)
+        ).collect(limit=1, days=30)
     assert result.status == "partial"
-    assert result.comment_requests == 2
-    assert len(calls) == 8
+    assert result.comment_requests == 3
+    assert len(calls) == 5
     assert len(result.posts) == 1

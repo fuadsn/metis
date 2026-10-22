@@ -21,7 +21,7 @@ def evaluate_reviews(store):
     actual_positive = sum(matrix["opportunity"].values())
     return {
         "status": "success",
-        "scoring_method": "intent_heuristic_v2",
+        "scoring_method": "intent_heuristic_v3",
         "reviewed": len(rows),
         "evaluated": len(rows) - len(stale),
         "stale_review_ids": stale,

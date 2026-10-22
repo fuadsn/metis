@@ -4,7 +4,7 @@ import logging
 import sqlite3
 import sys
 
-from config import SOURCE_NAMES, Settings
+from config import ANALYSIS_VERSION, DEFAULT_WINDOW_DAYS, SOURCE_NAMES, Settings
 from models import REVIEW_LABELS, timestamp
 from pipeline import collect_posts, run_analysis, run_pipeline, source_status
 from processors.evaluation import evaluate_reviews
@@ -47,13 +47,13 @@ def add_collection_arguments(parser, include_limit=True):
             "--limit",
             type=bounded_int(1, 500),
             default=50,
-            help="Maximum collected posts per source (default: 50; X minimum: 10)",
+            help="Maximum search matches per source, before comment enrichment (default: 50; X minimum: 10)",
         )
     parser.add_argument(
         "--days",
         type=bounded_int(1, 365),
-        default=30,
-        help="Lookback window (default: 30; X recent search capped at 7)",
+        default=DEFAULT_WINDOW_DAYS,
+        help="Lookback window (default: 180; X recent search capped at 7)",
     )
 
 
@@ -82,8 +82,9 @@ def latest(kind, limit=20, source=None, store=None, quality=None):
             "status": "error",
             "message": "No analysis found. Run 'metis run' first.",
         }
-    if kind in {"leads", "candidates"} and (
-        data.get("schema_version") != 2 or data.get("analysis_version") != 3
+    if (
+        data.get("schema_version") != 2
+        or data.get("analysis_version") != ANALYSIS_VERSION
     ):
         return {
             "status": "error",
@@ -106,6 +107,9 @@ def latest(kind, limit=20, source=None, store=None, quality=None):
         "window_days": data.get("window_days"),
         "analysis_status": data.get("status", "unknown"),
         "analysis_version": data.get("analysis_version"),
+        "lead_source_counts": data.get("lead_source_counts", {}),
+        "lead_age_counts": data.get("lead_age_counts", {}),
+        "supporting_evidence_count": data.get("supporting_evidence_count", 0),
         "latest_collection": collection,
         "collection_newer_than_analysis": bool(
             collection
@@ -142,7 +146,7 @@ def main(argv=None):
         "sources", help="Show configuration readiness without network calls"
     )
     status_parser.add_argument("--sources")
-    for name in ("leads", "ideas", "clusters", "candidates"):
+    for name in ("leads", "ideas", "clusters", "candidates", "supporting_evidence"):
         command = subparsers.add_parser(name)
         command.add_argument("--limit", type=bounded_int(1, 1000), default=20)
         command.add_argument("--source", choices=SOURCE_NAMES)
@@ -164,7 +168,13 @@ def main(argv=None):
     configure_logging()
 
     def execute():
-        if args.command in {"leads", "ideas", "clusters", "candidates"}:
+        if args.command in {
+            "leads",
+            "ideas",
+            "clusters",
+            "candidates",
+            "supporting_evidence",
+        }:
             return latest(
                 args.command,
                 args.limit,

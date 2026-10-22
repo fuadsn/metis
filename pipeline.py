@@ -5,7 +5,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from collectors import COLLECTORS
-from config import SOURCE_NAMES, Settings
+from config import ANALYSIS_VERSION, DEFAULT_WINDOW_DAYS, SOURCE_NAMES, Settings
 from generators import generate_ideas
 from processors import clean_posts, cluster_pain_points
 from processors.cleaner import rank_candidates
@@ -30,12 +30,13 @@ def source_status(settings=None):
                 else "ready",
                 "missing": missing,
                 "access_verified": False,
+                "evidence_role": "supporting" if name == "github" else "primary",
             }
         )
     return {"status": "success", "sources": result}
 
 
-def collect_posts(settings=None, store=None, limit=50, days=30):
+def collect_posts(settings=None, store=None, limit=50, days=DEFAULT_WINDOW_DAYS):
     settings, store = settings or Settings(), store or Store()
     summaries = []
     for source in settings.sources:
@@ -55,6 +56,8 @@ def collect_posts(settings=None, store=None, limit=50, days=30):
         "schema_version": 2,
         "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "selected_sources": list(settings.sources),
+        "window_days": days,
         "collected": sum(row["collected"] for row in summaries),
         "comments_collected": sum(row["comments_collected"] for row in summaries),
         "new": sum(row["new"] for row in summaries),
@@ -66,19 +69,24 @@ def collect_posts(settings=None, store=None, limit=50, days=30):
     return result
 
 
-def run_analysis(settings=None, store=None, days=30):
+def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
     settings, store = settings or Settings(), store or Store()
     since = (datetime.now(timezone.utc) - timedelta(days=days)).timestamp()
     posts = store.load_posts(sources=settings.sources, since=since, limit=None)
     cleaned = clean_posts(posts)
     candidates = rank_candidates(cleaned)
     points = [p for p in candidates if p["lead_quality"] != "noise"]
-    leads = [p for p in points if p["lead_quality"] == "opportunity"]
-    clusters = cluster_pain_points(leads)
+    leads = [
+        p
+        for p in points
+        if p["lead_quality"] == "opportunity" and p["evidence_role"] == "primary"
+    ]
+    supporting = [p for p in points if p["evidence_role"] == "supporting"]
+    clusters = cluster_pain_points(leads, supporting)
     ideas = generate_ideas(clusters)
     result = {
         "schema_version": 2,
-        "analysis_version": 3,
+        "analysis_version": ANALYSIS_VERSION,
         "status": "success",
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "selected_sources": list(settings.sources),
@@ -87,12 +95,16 @@ def run_analysis(settings=None, store=None, days=30):
         "comments_processed": sum(post.get("kind") == "comment" for post in posts),
         "quality_counts": dict(Counter(p["lead_quality"] for p in candidates)),
         "leads_count": len(leads),
+        "lead_source_counts": dict(Counter(p["source"] for p in leads)),
+        "lead_age_counts": dict(Counter(p["freshness"] for p in leads)),
+        "supporting_evidence_count": len(supporting),
         "source_counts": dict(Counter(p["source"] for p in posts)),
         "pain_points_count": len(points),
         "clusters_count": len(clusters),
         "ideas_count": len(ideas),
         "pain_points": points,
         "leads": leads,
+        "supporting_evidence": supporting,
         "candidates": candidates,
         "clusters": clusters,
         "ideas": ideas,
@@ -101,14 +113,14 @@ def run_analysis(settings=None, store=None, days=30):
     return result
 
 
-def run_pipeline(settings=None, store=None, limit=50, days=30):
+def run_pipeline(settings=None, store=None, limit=50, days=DEFAULT_WINDOW_DAYS):
     settings, store = settings or Settings(), store or Store()
     collection = collect_posts(settings, store, limit, days)
     if collection["status"] == "error":
         previous = store.load_result("latest_analysis.json") or {}
         compatible = (
             previous.get("schema_version") == 2
-            and previous.get("analysis_version") == 3
+            and previous.get("analysis_version") == ANALYSIS_VERSION
             and set(previous.get("selected_sources", [])) == set(settings.sources)
             and previous.get("window_days") == days
         )

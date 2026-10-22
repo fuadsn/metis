@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — Community discovery with historical evidence
+
+- Search Ask HN and comment text instead of sampling current story feeds. Query recent and historical periods separately, with bounded requests and original author/thread attribution.
+- Default to 180 days; expose evidence age and remove recency score bonuses. Add Software Recommendations to Stack Exchange defaults and use relevance ordering.
+- Keep GitHub issues as supporting evidence, with a separate CLI view. Related issues cannot create opportunities or increase primary recurrence counts.
+- Tighten firsthand intent checks to reject generic comparisons, tutorials, recruiting, research solicitations, and product promotions.
+- Report cluster age spans and clearly label thematic repeats and supporting matches as unverified.
+- Upgrade analysis format to version 4; run `metis analyze` to refresh saved results. Existing `.env` source/site/query overrides remain authoritative; use the new `.env.example` values to adopt the new discovery defaults.
+
 ## 0.3.0 — 2026-10-23
 
 - Rank opportunities using explicit intent, workflow burden, context, and recency, with a score breakdown. Separate support/weak signals and noise into review candidates; suppress common negations, promotions, hiring, bots, quoted examples, and code blocks.

@@ -1,33 +1,35 @@
-from datetime import datetime, timedelta, timezone
 from math import ceil
 
 from collectors.base import CollectionError, Collector, RateLimited, StopCollection
+from collectors.search import age_windows
 from models import plain_text
 
 
 class StackExchangeCollector(Collector):
     source = "stackexchange"
     supports_comments = True
+    search_request_limit = 20
 
     def _collect(self, limit, days):
         searches = [
-            (site, query)
+            (site, query, band, start, end)
             for site in self.settings.stackexchange_sites
             for query in self.settings.stackexchange_queries
+            for band, start, end in age_windows(days)
         ]
         if not searches:
             raise CollectionError(
                 "Configure at least one Stack Exchange site and query"
             )
-        cutoff = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
-        for site, query in searches:
+        for site, query, band, start, end in searches:
             try:
                 params = {
                     "site": site,
                     "q": query,
-                    "fromdate": cutoff,
+                    "fromdate": start,
+                    "todate": end,
                     "order": "desc",
-                    "sort": "creation",
+                    "sort": "relevance",
                     "closed": "false",
                     "filter": "withbody",
                     "pagesize": min(100, ceil(limit / len(searches))),
@@ -56,6 +58,8 @@ class StackExchangeCollector(Collector):
                             "num_comments": item.get("comment_count", 0),
                             "matched_queries": [query],
                             "metadata": {
+                                "discovery": "text_search",
+                                "age_band": band,
                                 "comment_count_unknown": "comment_count" not in item,
                                 "tags": item.get("tags", []),
                                 "answer_count": item.get("answer_count", 0),

@@ -63,8 +63,11 @@ DOMAIN = (
     "integration",
     "automation",
     "software",
-    "tool",
-    "tools",
+    "linux",
+    "cli",
+    "repository",
+    "repositories",
+    "config",
     "reporting",
     "dashboard",
     "onboarding",
@@ -105,6 +108,7 @@ def affirmed(phrase, text):
 def signal_text(text):
     # Preserve original bodies; quoted examples and code are not the author's intent.
     text = re.sub(r"```.*?(?:```|$)|~~~.*?(?:~~~|$)|<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(r"`[^`\n]+`|\b\w+\.\w+\([^\n)]*\)", "[code]", text)
     return "\n".join(
         line
         for line in text.splitlines()
@@ -117,12 +121,34 @@ def signal_text(text):
     )
 
 
+PRODUCT = r"\b(?:tools?|software|services?|solutions?|platforms?|apps?|libraries|library|frameworks?|providers?|systems?|products?|automation|integrations?|hosting)\b"
+PERSON = r"\b(?:i|i'm|i've|we|we're|we've|my|our)\b"
+PEOPLE_SEARCH = r"\blooking for\s+(?:(?:a|an|some|any|few|early|beta|full-stack|backend|frontend|dyslexic|senior|junior|software|java|data|ml)\s+){0,6}(?:engineers?|developers?|roles?|jobs?|employment|testers?|participants?)\b"
+
+
+def own_statement(phrase, sentence):
+    """Keep intent in the author's own clause, not elsewhere in a long post."""
+    normalized = matching_text(sentence)
+    position = normalized.find(phrase)
+    return position >= 0 and bool(
+        re.search(PERSON, normalized[max(0, position - 80) : position])
+    )
+
+
 def score_post(post, now=None):
     text = signal_text(
         post.get("text") or "\n".join((post.get("title", ""), post.get("body", "")))
     )
     keywords = [phrase for phrase in PAIN_KEYWORDS if affirmed(phrase, text)]
-    buying = [phrase for phrase in BUYING if affirmed(phrase, text)]
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+    buying = [
+        phrase
+        for phrase in BUYING
+        if any(
+            affirmed(phrase, sentence) and own_statement(phrase, sentence)
+            for sentence in sentences
+        )
+    ]
     search = [phrase for phrase in SEARCH if affirmed(phrase, text)]
     normalized = matching_text(text)
     if "looking for" in search and not re.search(
@@ -130,20 +156,91 @@ def score_post(post, now=None):
         normalized,
     ):
         search.remove("looking for")
+    if "looking for" in search and (
+        re.search(PEOPLE_SEARCH, normalized)
+        or re.search(
+            r"\blooking for (?:some |any )?(?:materials?|books?|courses?)\b|\b(?:was|were|instead of) looking for\b",
+            normalized,
+        )
+    ):
+        search.remove("looking for")
+    search = [
+        phrase
+        for phrase in search
+        if any(
+            affirmed(phrase, sentence)
+            and (
+                (
+                    phrase == "looking for"
+                    and (
+                        own_statement(phrase, sentence)
+                        or matching_text(sentence).startswith("looking for")
+                    )
+                )
+                or (
+                    phrase in {"alternative to", "alternatives to"}
+                    and re.search(PRODUCT, matching_text(sentence))
+                    and re.search(
+                        r"\b(?:looking for|seeking|need|want|recommend|suggest|any|are there|is there|what|which)\b",
+                        matching_text(sentence)[: matching_text(sentence).find(phrase)],
+                    )
+                )
+                or phrase in {"can someone recommend", "any recommendations"}
+            )
+            for sentence in sentences
+        )
+    ]
     tool_question = re.search(
         r"\b(?:which|what)\b[^.!?\n]{0,60}\b(?:tool|software|service|platform|library|framework)\b[^.!?\n]{0,60}\b(?:use|recommend)\b",
         normalized,
     )
     if tool_question:
         search.append(tool_question.group())
-    unmet = [phrase for phrase in UNMET if affirmed(phrase, text)]
-    burden = [phrase for phrase in BURDEN if affirmed(phrase, text)]
+    direct_request = re.search(
+        r"\b(?:i|we) (?:need|want|require|am seeking|are seeking)\s+(?!to\b)[^,.!?\n]{0,80}\b(?:tool|software|service|platform|library|framework|solution)\b",
+        normalized,
+    )
+    if direct_request:
+        search.append(direct_request.group())
+    unmet = [
+        phrase
+        for phrase in UNMET
+        if any(
+            affirmed(phrase, sentence)
+            and own_statement(phrase, sentence)
+            and (
+                re.search(PRODUCT, matching_text(sentence))
+                or any(matches(word, sentence) for word in DOMAIN)
+            )
+            for sentence in sentences
+        )
+    ]
+    burden = [
+        phrase
+        for phrase in BURDEN
+        if any(
+            affirmed(phrase, sentence) and own_statement(phrase, sentence)
+            for sentence in sentences
+        )
+    ]
     time_cost = re.search(
-        r"\b(?:spend|waste|lose|takes|costs)\b[^.!?\n]{0,60}\b(?:hours?|days?)\b",
+        r"\b(?:spends?|wastes?|loses?|takes|costs)\b[^.!?\n]{0,60}\b(?:hours?|days?)\b",
         normalized,
     )
     if time_cost:
         burden.append(time_cost.group())
+    firsthand = bool(re.search(PERSON, normalized))
+    recurring = bool(
+        re.search(
+            r"\b(?:every|each|per|a) (?:day|week|month|release|deployment)\b|\b(?:daily|weekly|monthly|repeatedly|repetitive)\b",
+            normalized,
+        )
+    )
+    # A manual action in a tutorial is not evidence of a recurring unmet need.
+    if not firsthand or not (recurring or time_cost or search or unmet):
+        burden = []
+    if not firsthand:
+        unmet = []
     questions = [phrase for phrase in QUESTIONS if matches(phrase, text)]
     labels = {
         str(label).lower() for label in post.get("metadata", {}).get("labels", [])
@@ -157,7 +254,7 @@ def score_post(post, now=None):
     )
     promotion = bool(
         re.search(
-            r"^show hn:|\b(?:i|we) (?:built|launched|created)\b|\b(?:try|check out) my\b",
+            r"^(?:show|launch) hn:|\b(?:i|we) (?:built|launched|created)\b|\b(?:try|check out) my\b|\blooking for (?:a few |some |early |beta )*(?:testers|users|feedback)\b|\bworking mvp\b",
             matching_text(text),
         )
     )
@@ -166,7 +263,7 @@ def score_post(post, now=None):
             r"\b(?:looking for (?:a )?(?:job|work|employment|internship)|we(?:'re| are) hiring)\b",
             matching_text(text),
         )
-    )
+    ) or bool(re.search(PEOPLE_SEARCH, normalized))
     bot = (
         post.get("author", "").lower().endswith("[bot]")
         or post.get("metadata", {}).get("author_type") == "Bot"
@@ -176,6 +273,11 @@ def score_post(post, now=None):
             r"community wishlist|feature request template|feature ideas\s*(?:&|and)\s*requests",
             post.get("title", ""),
             re.I,
+        )
+    ) or bool(
+        re.search(
+            r"\b(?:i'm|i am|we are|we're) (?:trying to understand|curious (?:what|how)|researching how|affiliated with)\b",
+            normalized,
         )
     )
     components = {"explicit_signal": 10 if candidate else 0}
@@ -195,11 +297,13 @@ def score_post(post, now=None):
     if candidate and relevant:
         components["startup_or_developer_context"] = 10
     created = post.get("created_utc")
-    if candidate and created:
-        age = ((now or datetime.now(timezone.utc).timestamp()) - created) / 86400
-        if 0 <= age <= 30:
-            components["recency"] = 5 if age <= 7 else 2
-    strong = bool(buying or search or unmet or burden or feature)
+    age = (
+        ((now if now is not None else datetime.now(timezone.utc).timestamp()) - created)
+        / 86400
+        if created
+        else None
+    )
+    strong = bool(buying or search or unmet or burden)
     score = min(100, sum(components.values()))
     quality = (
         "opportunity"
@@ -224,7 +328,6 @@ def score_post(post, now=None):
     phrases = list(
         dict.fromkeys(buying + search + unmet + burden + keywords + questions)
     )
-    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
     excerpt = next(
         (
             sentence
@@ -236,6 +339,16 @@ def score_post(post, now=None):
     )
     return {
         "lead_quality": quality,
+        "evidence_role": "supporting" if post.get("source") == "github" else "primary",
+        "age_days": round(age, 1) if age is not None and age >= 0 else None,
+        "freshness": "unknown"
+        if age is None or age < 0
+        else "recent"
+        if age <= 30
+        else "historical",
+        "current_need_verified": False,
+        "firsthand_context": firsthand,
+        "recurring_work_mentioned": recurring,
         "lead_type": "noise"
         if quality == "noise"
         else "buying_signal"
@@ -253,7 +366,7 @@ def score_post(post, now=None):
             dict.fromkeys(keywords + buying + search + unmet + burden)
         ),
         "evidence_excerpt": excerpt[:600],
-        "scoring_method": "intent_heuristic_v2",
+        "scoring_method": "intent_heuristic_v3",
     }
 
 

@@ -28,7 +28,6 @@ class GitHubCollector(Collector):
                     headers=headers,
                     params={
                         "q": f"{query} is:issue is:open is:public created:>={cutoff}",
-                        "sort": "created",
                         "order": "desc",
                         "per_page": per_query,
                     },

@@ -143,8 +143,11 @@ def author_key(point):
     return (point["source"], site, author)
 
 
-def cluster_pain_points(pain_points):
+def cluster_pain_points(pain_points, supporting_evidence=None):
     groups = defaultdict(dict)
+    supporting = defaultdict(list)
+    for point in supporting_evidence or []:
+        supporting[classify_need(point)].append(point)
     for point in pain_points:
         groups[classify_need(point)][point["post_id"]] = point
     clusters = []
@@ -178,6 +181,8 @@ def cluster_pain_points(pain_points):
                 seen_texts.add(content)
         independent = len(seen_threads)
         repeated = independent >= 2 and topic != "other"
+        dates = [p["created_utc"] for p in points if p.get("created_utc")]
+        age_counts = dict(Counter(p.get("freshness", "unknown") for p in points))
         priority = min(
             100,
             points[0]["priority_score"]
@@ -196,6 +201,15 @@ def cluster_pain_points(pain_points):
                 "distinct_text_count": len(texts),
                 "repeat_evidence_count": independent,
                 "repeated_need": repeated,
+                "repeat_validation": "related_theme_only; review original evidence to confirm the same need",
+                "evidence_span_days": int((max(dates) - min(dates)) / 86400)
+                if dates
+                else None,
+                "age_counts": age_counts,
+                "supporting_evidence": supporting[(topic, need)]
+                if topic != "other"
+                else [],
+                "supporting_match_method": "topic_and_need_only; does not count toward recurrence or priority",
                 "cross_source": len(sources) > 1,
                 "priority_score": priority,
                 "grouping_method": "synonym_need_rules_v1",

@@ -181,31 +181,28 @@ def test_legacy_import_orders_by_collection_time_across_sources(tmp_path):
     assert Store(tmp_path).load_posts()[0]["score"] == 4
 
 
-def test_hn_deduplicates_feed_ids_before_fetch_and_filters_deleted():
-    fetched = []
-
+def test_hn_deduplicates_search_results_and_filters_deleted():
     def handler(request):
-        if "stories.json" in request.url.path:
-            return httpx.Response(200, json=[1, 2])
-        fetched.append(request.url.path)
-        if "/2.json" in request.url.path:
-            return httpx.Response(200, json={"id": 2, "deleted": True})
         return httpx.Response(
             200,
             json={
-                "id": 1,
-                "type": "story",
-                "time": NOW,
-                "title": "Ask HN: Workflow tools?",
-                "text": "<p>Looking for a tool</p>",
+                "hits": [
+                    {
+                        "objectID": "1",
+                        "created_at_i": int(NOW),
+                        "title": "Ask HN: Workflow tools?",
+                        "story_text": "<p>Looking for a tool</p>",
+                    },
+                    {"objectID": "2", "created_at_i": int(NOW), "deleted": True},
+                ]
             },
         )
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = COLLECTORS["hackernews"](settings(), client).collect(limit=10)
+        result = COLLECTORS["hackernews"](settings(), client).collect(limit=20, days=30)
     assert result.status == "success"
     assert len(result.posts) == 1
-    assert len(fetched) == 2
+    assert len(result.posts[0]["matched_queries"]) == 5
     assert result.posts[0]["body"] == "Looking for a tool"
 
 
@@ -450,8 +447,8 @@ def test_collection_and_analysis_share_store_and_partial_status(tmp_path, monkey
     assert second["new"] == 0
     analysis = run_analysis(config, store)
     assert analysis["posts_processed"] == 1
-    assert analysis["leads"][0]["lead_type"] == "buying_signal"
-    assert analysis["leads"][0]["url"].endswith("/issues/1")
+    assert analysis["supporting_evidence"][0]["lead_type"] == "buying_signal"
+    assert analysis["supporting_evidence"][0]["url"].endswith("/issues/1")
     assert analysis["source_counts"] == {"github": 1}
     assert store.load_result("latest_collection.json")["status"] == "partial"
 
@@ -485,7 +482,7 @@ def test_failed_collection_preserves_last_analysis_without_mixing_scope(
     store = Store(tmp_path)
     previous = {
         "schema_version": 2,
-        "analysis_version": 3,
+        "analysis_version": 4,
         "status": "success",
         "leads": [{"post_id": f"{(scope or ['github'])[0]}:1"}],
         "window_days": window,
@@ -496,6 +493,7 @@ def test_failed_collection_preserves_last_analysis_without_mixing_scope(
     result = run_pipeline(
         settings(sources=["reddit"], reddit_client_id="", reddit_client_secret=""),
         store,
+        days=30,
     )
     assert result["status"] == "error"
     assert result["analysis_reused"] is reused

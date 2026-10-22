@@ -161,7 +161,8 @@ def test_analysis_exposes_review_candidates_but_only_opportunities_become_leads(
     )
     result = run_analysis(Settings(sources=["github"]), store)
     assert result["quality_counts"] == {"opportunity": 1, "support": 1, "noise": 1}
-    assert result["leads_count"] == 1
+    assert result["leads_count"] == 0
+    assert result["supporting_evidence_count"] == 2
     assert len(result["candidates"]) == 3
     assert all(
         p["lead_quality"] == "opportunity"

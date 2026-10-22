@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 import httpx
 
-from config import Settings
+from config import DEFAULT_WINDOW_DAYS, Settings
 from models import normalize_post, unique_posts
 from processors.cleaner import clean_posts, rank_candidates
 from processors.signals import promising_discussion
@@ -53,6 +53,7 @@ class CollectionResult:
 class Collector:
     source = ""
     supports_comments = False
+    search_request_limit = 10
 
     def __init__(self, settings: Optional[Settings] = None, client=None):
         self.settings = settings or Settings()
@@ -63,7 +64,7 @@ class Collector:
     def missing_configuration(self) -> List[str]:
         return []
 
-    def collect(self, limit=50, days=30) -> CollectionResult:
+    def collect(self, limit=50, days=DEFAULT_WINDOW_DAYS) -> CollectionResult:
         if not 1 <= limit <= 500 or not 1 <= days <= 365:
             raise ValueError("limit must be 1–500 and days must be 1–365")
         self.result = CollectionResult(self.source)
@@ -72,7 +73,7 @@ class Collector:
             self.result.status = "unconfigured"
             self.result.errors = ["Set " + ", ".join(missing)]
             return self.result
-        self.request_limit = 10 if self.source != "hackernews" else limit + 5
+        self.request_limit = self.search_request_limit
         owned = self.client is None
         if owned:
             self.client = httpx.Client(timeout=10, follow_redirects=False)
@@ -100,7 +101,9 @@ class Collector:
         self.result.posts = unique_posts(self.result.posts)[:limit]
         self.result.comments = unique_posts(self.result.comments)
         if self.result.errors:
-            self.result.status = "partial" if self.result.posts else "error"
+            self.result.status = (
+                "partial" if self.result.posts or self.result.comments else "error"
+            )
         return self.result
 
     def collect_all(self):
@@ -111,6 +114,9 @@ class Collector:
 
     def add(self, raw):
         self.result.posts.append(normalize_post(raw, self.source))
+
+    def comment_budget(self):
+        return self.settings.comment_threads
 
     def _enrich_comments(self):
         if not self.supports_comments or not self.settings.comment_threads:
@@ -134,9 +140,7 @@ class Collector:
             )
         )
         before = self.result.requests
-        budget = self.settings.comment_threads * (
-            self.settings.comments_per_thread if self.source == "hackernews" else 1
-        )
+        budget = self.comment_budget()
         self.request_limit = before + budget
         try:
             for point in candidates[: self.settings.comment_threads]:
