@@ -51,6 +51,8 @@ def main():
         assert analysis["posts_processed"] == 0
         assert (data / "metis.sqlite3").is_file()
         assert run("leads")["leads"] == []
+        assert run("candidates")["candidates"] == []
+        assert run("evaluate")["evaluated"] == 0
     print("Installed wheel: configuration, analysis, storage, and CLI checks passed.")
 
 

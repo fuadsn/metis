@@ -69,6 +69,7 @@ def test_latest_exposes_newer_failed_collection_without_relabeling_saved_analysi
     store.save_result(
         {
             "schema_version": 2,
+            "analysis_version": 3,
             "status": "success",
             "processed_at": "2026-10-20T00:00:00+00:00",
             "selected_sources": ["github"],

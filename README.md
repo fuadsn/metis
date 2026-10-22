@@ -16,7 +16,7 @@ V1 uses **Hacker News, GitHub Issues, and Stack Exchange** with no API fees or r
 | GitHub Issues | Public, open workflow/integration feature requests and workarounds | Enabled; public reads, token optional |
 | Stack Exchange | Stack Overflow and Server Fault workflow/deployment questions | Enabled; public reads, API key optional |
 
-These are research leads, not verified buyers. GitHub issues and Stack Exchange questions can indicate ordinary support needs rather than product demand. Collection samples recent listings and the first page per configured search; it is not an exhaustive archive. Full comment threads are not collected in this version.
+These are research leads, not verified buyers. GitHub issues and Stack Exchange questions can indicate ordinary support needs rather than product demand. Collection samples recent listings, the first page per configured search, and a few comments from selected discussions; it is not an exhaustive archive.
 
 ## Setup
 
@@ -50,7 +50,12 @@ metis collect --sources github --limit 20
 metis analyze --days 30
 metis leads --limit 20
 metis leads --source github --limit 10
+metis candidates --quality support --limit 10
+metis clusters
 metis ideas
+
+# Collect posts without making any comment requests:
+metis run --limit 30 --comment-threads 0
 
 # Same commands without installation:
 python cli.py sources
@@ -66,15 +71,44 @@ METIS_GITHUB_QUERIES='["repo:your-org/your-tool label:enhancement"]'
 METIS_STACKEXCHANGE_QUERIES='["deployment workaround", "manual workflow"]'
 ```
 
-GitHub searches always restrict results to public open issues. Lookback is based on creation time. Limits are ceilings, not guaranteed result counts. Each source has a 60-second budget (an in-flight request may finish later) and at most 10 HTTP attempts, except HN, which allows `limit + 5` attempts. Rate limits stop that source for the current run. Transient network/server failures receive bounded retries.
+GitHub searches always restrict results to public open issues. Lookback is based on creation time. Limits are ceilings, not guaranteed result counts. Each source has a shared 60-second budget for posts and comments (an in-flight request may finish later). Post collection allows at most 10 HTTP attempts, except HN, which allows `limit + 5`. Rate limits stop that source for the current run. Transient network/server failures receive bounded retries.
+
+## Selective comments
+
+By default, Metis samples up to **3 comments from 3 promising threads per free source**. It selects opportunity candidates first; relevant Ask HN questions can also qualify because the need may appear only in replies. It samples top-level HN replies in display order, the first GitHub issue comments, and Stack Exchange question comments ordered by votes. It skips deleted HN comments and GitHub bot replies. Nested HN replies, pull-request reviews, and Stack Exchange answers are not fetched.
+
+`--comment-threads` / `METIS_COMMENT_THREADS` accepts 0–5; zero disables comment collection. `--comments-per-thread` / `METIS_COMMENTS_PER_THREAD` accepts 1–10. The comment phase allows at most `threads × comments` additional HTTP attempts on HN and `threads` on GitHub or Stack Exchange, including retries. The default adds at most 9 HN attempts and 3 attempts for each other source, within the same time budget.
+
+Comments have their own IDs, authors, timestamps, and URLs, plus `kind: comment`, `parent_id`, and `parent_url`. A parent's title supplies subject context but never buying intent to a reply. Collection summaries separate `collected` posts from `comments_collected`; `new`, `updated`, and `total_stored` count both. A comment failure keeps the collected posts and reports a partial result.
 
 ## Output and failure handling
 
 CLI stdout is JSON; progress logs go to stderr. Exit codes: `0` success, `2` partial collection, `1` failure. Reddit/X appear as `disabled` in the default configuration. If explicitly enabled later, missing credentials appear as `unconfigured` while other sources continue. `metis sources` reports configuration readiness, not verified API permission.
 
-A completely failed collection preserves the last analysis on disk. The failed run includes cached analysis only when its `selected_sources` and `window_days` match the request, with `analysis_reused: true`. Retrieval commands (`leads`, `ideas`, `clusters`) return the saved analysis scope, timestamp, and `latest_collection`; `collection_newer_than_analysis` flags a subsequent collection attempt. Check these fields before treating saved leads as current. Watch mode reports temporary storage errors as JSON and tries again at the next scheduled interval.
+A completely failed collection preserves the last analysis on disk. The failed run includes cached analysis only when its analysis version, `selected_sources`, and `window_days` match the request, with `analysis_reused: true`. Retrieval commands return the saved analysis scope, timestamp, and `latest_collection`; `collection_newer_than_analysis` flags a subsequent collection attempt. Check these fields before treating saved leads as current. Watch mode reports temporary storage errors as JSON and tries again at the next scheduled interval. After upgrading, run `metis analyze` to refresh older saved output with the current rules.
 
-Each lead includes `source`, `community`, source-qualified `post_id`, full body, discussion URL, author, creation time, matched phrases, evidence excerpt, lead type, and a transparent heuristic priority score. Popularity alone does not qualify a post. Scores are not purchase probabilities. The existing idea generator still uses fixed templates; its output is marked `hypothesis: true` and `scoring_method: fixed_template`.
+Each lead includes `source`, `community`, source-qualified `post_id`, full body, discussion URL, author, creation time, matched phrases, evidence excerpt, lead type, `lead_quality`, and a heuristic priority score with `score_breakdown`. `leads` contains opportunity candidates; `candidates` also exposes support/weak signals and noise for review. Popularity alone does not qualify a post. Scores are not purchase probabilities.
+
+The rules favor explicit willingness to pay, searches for products, unmet capabilities, and manual or costly workflows in startup/developer contexts. They discount ordinary support, common negations, promotions, hiring, bots, code samples, and blockquotes. Recency contributes at most five points. These are English rules and can miss intent or mistake implementation tasks for market demand.
+
+Groups combine subject synonyms (such as deployment/CI/CD and authentication/SSO) with need categories such as automation, cost, or reliability. They expose evidence links, thread counts, and source-qualified author-account counts. A repeated-need flag requires at least two distinct threads, accounts, and texts; a conservative selection avoids boosting repeated replies, reposts by one author, or exact copies. Accounts across platforms are not verified as distinct people. Unknown topics do not receive a repeated-need boost. This is rule-based grouping, not semantic clustering.
+
+Idea suggestions remain fixed-template hypotheses with `hypothesis: true` and `scoring_method: fixed_template`. Their demand ordering now follows intent and repeat evidence rather than comparing platform upvotes. Novelty/build/market template scores remain unvalidated.
+
+## Review lead quality
+
+Review the original evidence, then label posts locally:
+
+```bash
+metis candidates --limit 30
+# Replace the example ID with a post_id from your own output.
+metis review github:123 --label opportunity --note "Explicit need for a paid workflow tool"
+metis review github:456 --label support
+metis review hackernews:789 --label noise
+metis evaluate
+```
+
+Labels are `opportunity`, `support`, or `noise`. Reviews stay in SQLite and do not post anything to the source platform or automatically retrain the rules. Evaluation reports a confusion matrix and opportunity precision/recall on your labelled sample only. Metrics are null when their denominator is zero. Reviews of edited evidence are marked stale and excluded until reviewed again. The test suite's illustrative examples are regression checks, not an independent accuracy benchmark.
 
 ## Deferred sources
 
@@ -99,17 +133,13 @@ python -m pip install -e '.[dev]'
 python -m ruff check .
 python -m pytest -q
 python -m build
-python scripts/check_wheel.py dist/*.whl
+python scripts/check_wheel.py dist/metis-0.3.0-py3-none-any.whl
 ```
 
 GitHub Actions runs these checks on Python 3.9 and 3.14 for pushes and pull requests. Tests use mocked HTTP responses and temporary databases; they do not consume API credits. The wheel check installs dependencies from PyPI, then verifies configuration, local analysis, and storage outside the checkout without contacting source platforms. It does not schedule collection.
 
 `pipeline.py` is shared by the CLI, scheduler, and legacy agent command wrappers. Despite their historical filenames, `mcp_server.py` and `mcp_simple.py` are JSON command adapters, not MCP protocol servers. See [CHANGELOG.md](CHANGELOG.md) for the v1 changes.
 
-## Next improvements
+## Remaining limitations
 
-- **Measure lead quality:** label a small review set as actionable demand, support question, or noise; use it to evaluate phrase matching and ranking before changing scores.
-- **Group repeated needs:** combine related terms and related posts across sources, retaining evidence and distinct-author counts. Current clustering uses literal keywords.
-- **Increase coverage selectively:** add incremental collection checkpoints and bounded comment retrieval for the highest-signal threads. Current collection samples recent posts and may miss older active discussions.
-
-These are follow-up work, not implemented features. Reddit and X remain deferred.
+Incremental collection checkpoints, exhaustive pagination, full conversation trees, semantic grouping, and an independently reviewed quality benchmark remain future work. Sampling only promising threads can miss opportunities whose root post has no detectable signal. Reddit and X remain deferred.

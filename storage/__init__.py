@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Optional
 
 from config import DATA_DIR
-from models import normalize_post, timestamp, unique_posts
+from models import (
+    REVIEW_LABELS,
+    evidence_fingerprint,
+    normalize_post,
+    timestamp,
+    unique_posts,
+)
 
 
 class Store:
@@ -28,6 +34,10 @@ class Store:
                 CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS runs (
                     id INTEGER PRIMARY KEY, recorded_at TEXT NOT NULL, payload TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS reviews (
+                    post_id TEXT PRIMARY KEY, label TEXT NOT NULL, note TEXT NOT NULL,
+                    reviewed_at TEXT NOT NULL, fingerprint TEXT NOT NULL
                 );
             """)
             if not db.execute(
@@ -148,6 +158,46 @@ class Store:
                 (datetime.now(timezone.utc).isoformat(), json.dumps(result)),
             )
         self.save_result(result, "latest_collection.json")
+
+    def save_review(self, post_id, label, note=""):
+        if label not in REVIEW_LABELS:
+            raise ValueError("Review label must be opportunity, support, or noise")
+        if len(note) > 2000:
+            raise ValueError("Review note must be at most 2000 characters")
+        reviewed_at = datetime.now(timezone.utc).isoformat()
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT payload FROM posts WHERE id=?", (post_id,)
+            ).fetchone()
+            if not row:
+                raise ValueError("Post ID was not found in the local evidence store")
+            fingerprint = evidence_fingerprint(json.loads(row[0]))
+            db.execute(
+                """INSERT INTO reviews VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(post_id) DO UPDATE SET label=excluded.label,
+                       note=excluded.note, reviewed_at=excluded.reviewed_at,
+                       fingerprint=excluded.fingerprint""",
+                (post_id, label, note, reviewed_at, fingerprint),
+            )
+        return {
+            "status": "success",
+            "post_id": post_id,
+            "label": label,
+            "reviewed_at": reviewed_at,
+        }
+
+    def reviewed_posts(self):
+        with self.connection() as db:
+            return [
+                {
+                    "post": json.loads(payload),
+                    "label": label,
+                    "fingerprint": fingerprint,
+                }
+                for payload, label, fingerprint in db.execute(
+                    "SELECT p.payload, r.label, r.fingerprint FROM reviews r JOIN posts p ON p.id=r.post_id ORDER BY r.post_id"
+                )
+            ]
 
 
 # Compatibility for existing Python consumers. IDs are now source-qualified.

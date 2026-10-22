@@ -80,6 +80,12 @@ def queries_env(name, default):
 
 @dataclass
 class Settings:
+    comment_threads: int = field(
+        default_factory=lambda: int(os.getenv("METIS_COMMENT_THREADS", "3"))
+    )
+    comments_per_thread: int = field(
+        default_factory=lambda: int(os.getenv("METIS_COMMENTS_PER_THREAD", "3"))
+    )
     sources: List[str] = field(
         default_factory=lambda: csv_env("METIS_SOURCES", ",".join(DEFAULT_SOURCES))
     )
@@ -139,6 +145,13 @@ class Settings:
     )
 
     def __post_init__(self):
+        if (
+            not 0 <= self.comment_threads <= 5
+            or not 1 <= self.comments_per_thread <= 10
+        ):
+            raise ValueError(
+                "comment_threads must be 0–5 and comments_per_thread must be 1–10"
+            )
         unknown = set(self.sources) - set(SOURCE_NAMES)
         if unknown:
             raise ValueError(f"Unknown sources: {', '.join(sorted(unknown))}")

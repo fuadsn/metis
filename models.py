@@ -1,11 +1,20 @@
 """Canonical evidence format, including migration of original JSON data."""
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from html import unescape
 from html.parser import HTMLParser
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+REVIEW_LABELS = ("opportunity", "support", "noise")
+
+
+def evidence_fingerprint(post):
+    content = {key: post.get(key, "") for key in ("title", "body", "source", "author")}
+    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 
 class _TextParser(HTMLParser):
@@ -42,6 +51,9 @@ class Post(BaseModel):
     id: str
     external_id: str
     source: str
+    kind: Literal["post", "comment"] = "post"
+    parent_id: Optional[str] = None
+    parent_url: str = ""
     community: str = ""
     title: str = ""
     body: str = ""
@@ -68,7 +80,7 @@ def normalize_post(raw: Dict, source: Optional[str] = None) -> Dict:
         raise ValueError("Post is missing its source ID")
     url = raw.get("url") or ""
     if source == "hackernews":
-        url = f"https://news.ycombinator.com/item?id={external_id}"
+        url = f"https://news.ycombinator.com/item?id={external_id.removeprefix('comment:')}"
     elif source == "reddit" and raw.get("permalink"):
         url = "https://www.reddit.com" + raw["permalink"]
     body = raw.get("body", raw.get("selftext", raw.get("text", ""))) or ""
@@ -78,6 +90,9 @@ def normalize_post(raw: Dict, source: Optional[str] = None) -> Dict:
         id=f"{source}:{external_id}",
         external_id=external_id,
         source=source,
+        kind=raw.get("kind", "post"),
+        parent_id=raw.get("parent_id"),
+        parent_url=raw.get("parent_url", ""),
         community=raw.get("community") or raw.get("subreddit") or source,
         title=raw.get("title") or "",
         body=body,

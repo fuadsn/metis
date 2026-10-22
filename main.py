@@ -23,7 +23,11 @@ def main(argv=None):
     def run():
         result = run_safely(
             lambda: run_pipeline(
-                settings_for(args.sources), limit=args.limit, days=args.days
+                settings_for(
+                    args.sources, args.comment_threads, args.comments_per_thread
+                ),
+                limit=args.limit,
+                days=args.days,
             )
         )
         print(json.dumps(result), flush=True)

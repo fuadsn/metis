@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-10-23
+
+- Rank opportunities using explicit intent, workflow burden, context, and recency, with a score breakdown. Separate support/weak signals and noise into review candidates; suppress common negations, promotions, hiring, bots, quoted examples, and code blocks.
+- Group subject synonyms and needs across sources. Track threads, author accounts, and distinct texts; avoid boosting same-thread replies, one author's reposts, and exact copies as repeated demand. Order idea hypotheses by intent and repeat evidence instead of cross-platform upvotes.
+- Sample bounded comments from promising HN, GitHub, and Stack Exchange discussions with separate IDs and original attribution. Keep provider rate-limit and time-budget handling across both phases. Reddit and X remain disabled.
+- Add local `review`, `evaluate`, and `candidates` commands. Evaluate only explicit labels and exclude stale reviews when evidence changes.
+- Extend offline regression coverage for scoring, grouping, comments, review persistence, and evaluation. Stored analysis has `analysis_version: 3`; run `metis analyze` after upgrading.
+
 ## 0.2.0 — 2026-10-21
 
 First version focused on startup and developer-tool leads from free public sources.

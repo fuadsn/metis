@@ -7,6 +7,7 @@ from models import plain_text
 
 class StackExchangeCollector(Collector):
     source = "stackexchange"
+    supports_comments = True
 
     def _collect(self, limit, days):
         searches = [
@@ -55,6 +56,7 @@ class StackExchangeCollector(Collector):
                             "num_comments": item.get("comment_count", 0),
                             "matched_queries": [query],
                             "metadata": {
+                                "comment_count_unknown": "comment_count" not in item,
                                 "tags": item.get("tags", []),
                                 "answer_count": item.get("answer_count", 0),
                                 "is_answered": item.get("is_answered", False),
@@ -69,3 +71,38 @@ class StackExchangeCollector(Collector):
                 raise
             except CollectionError as exc:
                 self.result.errors.append(str(exc))
+
+    def _fetch_comments(self, post, limit):
+        question_id = post["external_id"].split(":")[-1]
+        if not question_id.isdigit():
+            raise CollectionError("Missing Stack Exchange question ID for comments")
+        params = {
+            "site": post["community"],
+            "filter": "withbody",
+            "pagesize": limit,
+            "sort": "votes",
+            "order": "desc",
+        }
+        if self.settings.stackexchange_key:
+            params["key"] = self.settings.stackexchange_key
+        data = self.request(
+            "GET",
+            f"https://api.stackexchange.com/2.3/questions/{question_id}/comments",
+            params=params,
+        )
+        if data.get("error_id"):
+            raise CollectionError("Stack Exchange rejected the comments request")
+        for item in data["items"][:limit]:
+            yield {
+                "id": f"{post['community']}:comment:{item['comment_id']}",
+                "body": plain_text(item.get("body", "")),
+                "url": item.get("link")
+                or f"{post['url'].split('#')[0]}#comment{item['comment_id']}_{question_id}",
+                "author": str((item.get("owner") or {}).get("user_id", "")),
+                "created_utc": item["creation_date"],
+                "score": item.get("score", 0),
+            }
+        if data.get("backoff") or data.get("quota_remaining") == 0:
+            raise RateLimited(
+                "Stack Exchange requested backoff or exhausted quota; stopped this run"
+            )

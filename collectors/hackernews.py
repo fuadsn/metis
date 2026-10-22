@@ -6,6 +6,7 @@ from models import plain_text
 
 class HNCollector(Collector):
     source = "hackernews"
+    supports_comments = True
     base_url = "https://hacker-news.firebaseio.com/v0"
 
     def _collect(self, limit, days):
@@ -37,10 +38,34 @@ class HNCollector(Collector):
                         **story,
                         "title": plain_text(story.get("title", "")),
                         "body": plain_text(story.get("text", "")),
-                        "metadata": {"external_url": story.get("url", "")},
+                        "metadata": {
+                            "external_url": story.get("url", ""),
+                            "comment_ids": story.get("kids", [])[:10],
+                        },
                     }
                 )
             except StopCollection:
                 raise
             except CollectionError as exc:
                 self.result.errors.append(f"Item {story_id}: {exc}")
+
+    def _fetch_comments(self, post, limit):
+        for item_id in post["metadata"].get("comment_ids", [])[:limit]:
+            if not isinstance(item_id, int) or item_id < 1:
+                continue
+            comment = self.request("GET", f"{self.base_url}/item/{item_id}.json")
+            if (
+                not comment
+                or comment.get("deleted")
+                or comment.get("dead")
+                or comment.get("type") != "comment"
+            ):
+                continue
+            if str(comment.get("parent")) != post["external_id"]:
+                continue
+            yield {
+                "id": f"comment:{comment['id']}",
+                "body": plain_text(comment.get("text", "")),
+                "author": comment.get("by", ""),
+                "created_utc": comment.get("time"),
+            }

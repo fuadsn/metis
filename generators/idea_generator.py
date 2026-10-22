@@ -91,7 +91,6 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
     for cluster in clusters:
         topic = cluster.get("topic", "other")
         count = cluster.get("count", 0)
-        avg_score = cluster.get("avg_score", 1)
 
         topic_ideas = topic_idea_templates.get(topic, [])
 
@@ -99,7 +98,7 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
             topic_ideas = _generate_fallback_ideas(topic, cluster)
 
         for i, (desc, build_diff, market_diff, novelty) in enumerate(topic_ideas):
-            demand_signal = count * (avg_score / 100)
+            demand_signal = cluster.get("priority_score", 0)
 
             ideas.append(
                 {
@@ -112,6 +111,13 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
                     "build_difficulty": build_diff,
                     "market_difficulty": market_diff,
                     "demand_signal": demand_signal,
+                    "demand_signal_method": "intent_and_repeat_evidence",
+                    "need": cluster.get("need", "general"),
+                    "thread_count": cluster.get("thread_count", count),
+                    "distinct_author_accounts": cluster.get(
+                        "distinct_author_accounts", 0
+                    ),
+                    "repeated_need": cluster.get("repeated_need", False),
                     "evidence_count": count,
                     "sources": cluster.get("sources", []),
                     "evidence_urls": cluster.get("evidence_urls", []),
@@ -120,7 +126,7 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
                 }
             )
 
-    ideas.sort(key=lambda x: (x["novelty_score"], x["demand_signal"]), reverse=True)
+    ideas.sort(key=lambda x: (-x["demand_signal"], x["id"]))
 
     return ideas
 

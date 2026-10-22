@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from collectors import COLLECTORS
 from config import SOURCE_NAMES, Settings
 from generators import generate_ideas
-from processors import clean_posts, cluster_pain_points, extract_pain_points
+from processors import clean_posts, cluster_pain_points
+from processors.cleaner import rank_candidates
 from storage import Store
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ def collect_posts(settings=None, store=None, limit=50, days=30):
     for source in settings.sources:
         logger.info("Collecting %s", source)
         result = COLLECTORS[source](settings).collect(limit=limit, days=days)
-        counts = store.upsert(result.posts)
+        counts = store.upsert(result.posts + result.comments)
         summaries.append({**result.summary(), **counts})
     succeeded = any(row["status"] in {"success", "partial"} for row in summaries)
     status = (
@@ -55,6 +56,7 @@ def collect_posts(settings=None, store=None, limit=50, days=30):
         "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "collected": sum(row["collected"] for row in summaries),
+        "comments_collected": sum(row["comments_collected"] for row in summaries),
         "new": sum(row["new"] for row in summaries),
         "updated": sum(row["updated"] for row in summaries),
         "total_stored": sum(store.counts().values()),
@@ -69,22 +71,29 @@ def run_analysis(settings=None, store=None, days=30):
     since = (datetime.now(timezone.utc) - timedelta(days=days)).timestamp()
     posts = store.load_posts(sources=settings.sources, since=since, limit=None)
     cleaned = clean_posts(posts)
-    points = extract_pain_points(cleaned)
-    clusters = cluster_pain_points(points)
+    candidates = rank_candidates(cleaned)
+    points = [p for p in candidates if p["lead_quality"] != "noise"]
+    leads = [p for p in points if p["lead_quality"] == "opportunity"]
+    clusters = cluster_pain_points(leads)
     ideas = generate_ideas(clusters)
     result = {
         "schema_version": 2,
+        "analysis_version": 3,
         "status": "success",
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "selected_sources": list(settings.sources),
         "window_days": days,
         "posts_processed": len(posts),
+        "comments_processed": sum(post.get("kind") == "comment" for post in posts),
+        "quality_counts": dict(Counter(p["lead_quality"] for p in candidates)),
+        "leads_count": len(leads),
         "source_counts": dict(Counter(p["source"] for p in posts)),
         "pain_points_count": len(points),
         "clusters_count": len(clusters),
         "ideas_count": len(ideas),
         "pain_points": points,
-        "leads": points,
+        "leads": leads,
+        "candidates": candidates,
         "clusters": clusters,
         "ideas": ideas,
     }
@@ -99,6 +108,7 @@ def run_pipeline(settings=None, store=None, limit=50, days=30):
         previous = store.load_result("latest_analysis.json") or {}
         compatible = (
             previous.get("schema_version") == 2
+            and previous.get("analysis_version") == 3
             and set(previous.get("selected_sources", [])) == set(settings.sources)
             and previous.get("window_days") == days
         )

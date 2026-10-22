@@ -8,6 +8,8 @@ import httpx
 
 from config import Settings
 from models import normalize_post, unique_posts
+from processors.cleaner import clean_posts, rank_candidates
+from processors.signals import promising_discussion
 
 
 class CollectionError(Exception):
@@ -31,6 +33,9 @@ class CollectionResult:
     posts: List[Dict] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     requests: int = 0
+    comments: List[Dict] = field(default_factory=list)
+    comment_threads: int = 0
+    comment_requests: int = 0
 
     def summary(self):
         return {
@@ -38,12 +43,16 @@ class CollectionResult:
             "status": self.status,
             "collected": len(self.posts),
             "requests": self.requests,
+            "comments_collected": len(self.comments),
+            "comment_threads": self.comment_threads,
+            "comment_requests": self.comment_requests,
             "errors": self.errors,
         }
 
 
 class Collector:
     source = ""
+    supports_comments = False
 
     def __init__(self, settings: Optional[Settings] = None, client=None):
         self.settings = settings or Settings()
@@ -70,6 +79,8 @@ class Collector:
         self.deadline = time.monotonic() + 60
         try:
             self._collect(limit, days)
+            self.result.posts = unique_posts(self.result.posts)[:limit]
+            self._enrich_comments()
         except (
             CollectionError,
             ValueError,
@@ -87,6 +98,7 @@ class Collector:
                 self.client.close()
                 self.client = None
         self.result.posts = unique_posts(self.result.posts)[:limit]
+        self.result.comments = unique_posts(self.result.comments)
         if self.result.errors:
             self.result.status = "partial" if self.result.posts else "error"
         return self.result
@@ -99,6 +111,65 @@ class Collector:
 
     def add(self, raw):
         self.result.posts.append(normalize_post(raw, self.source))
+
+    def _enrich_comments(self):
+        if not self.supports_comments or not self.settings.comment_threads:
+            return
+        candidates = [
+            p
+            for p in rank_candidates(clean_posts(self.result.posts))
+            if (p["lead_quality"] == "opportunity" or promising_discussion(p))
+            and (
+                p["num_comments"] > 0
+                or p["metadata"].get("comment_ids")
+                or p["metadata"].get("comment_count_unknown")
+            )
+        ]
+        candidates.sort(
+            key=lambda p: (
+                p["lead_quality"] != "opportunity",
+                -p["priority_score"],
+                -p["num_comments"],
+                p["post_id"],
+            )
+        )
+        before = self.result.requests
+        budget = self.settings.comment_threads * (
+            self.settings.comments_per_thread if self.source == "hackernews" else 1
+        )
+        self.request_limit = before + budget
+        try:
+            for point in candidates[: self.settings.comment_threads]:
+                parent = {**point, "id": point["post_id"]}
+                self.result.comment_threads += 1
+                try:
+                    for raw in self._fetch_comments(
+                        parent, self.settings.comments_per_thread
+                    ):
+                        self.result.comments.append(
+                            normalize_post(
+                                {
+                                    **raw,
+                                    "kind": "comment",
+                                    "title": "",
+                                    "parent_id": parent["id"],
+                                    "parent_url": parent["url"],
+                                    "community": parent["community"],
+                                    "matched_queries": parent["matched_queries"],
+                                    "metadata": {
+                                        **raw.get("metadata", {}),
+                                        "parent_title": parent["title"],
+                                    },
+                                },
+                                self.source,
+                            )
+                        )
+                except StopCollection:
+                    raise
+                except CollectionError as exc:
+                    self.result.errors.append(f"Comments: {exc}")
+        finally:
+            self.result.comment_requests = self.result.requests - before
 
     def request(self, method, url, **kwargs):
         for attempt in range(3):

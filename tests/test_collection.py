@@ -57,6 +57,7 @@ def test_default_run_never_calls_deferred_sources_even_with_credentials(
 
 def settings(**kwargs):
     defaults = dict(
+        comment_threads=0,
         reddit_client_id="test-app",
         reddit_client_secret="test-secret",
         x_bearer_token="test-token",
@@ -484,6 +485,7 @@ def test_failed_collection_preserves_last_analysis_without_mixing_scope(
     store = Store(tmp_path)
     previous = {
         "schema_version": 2,
+        "analysis_version": 3,
         "status": "success",
         "leads": [{"post_id": f"{(scope or ['github'])[0]}:1"}],
         "window_days": window,
