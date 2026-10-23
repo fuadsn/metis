@@ -4,7 +4,7 @@
 
 Find unmet needs faced by small businesses and everyday people in public discussions. Metis searches community discussions for firsthand problems, recurring work, and requests for solutions. It exports candidates with dates, excerpts, and links, and keeps GitHub issues as supporting research.
 
-V1 uses **Hacker News, Stack Exchange, public Shopify/Monzo forums, and supporting GitHub Issues** with no API fees or required credentials. Reddit and X adapters are retained but disabled by default for a later version.
+V1 uses **Hacker News, topic communities on Stack Exchange, and supporting GitHub Issues** with no API fees or required credentials. Reddit, X, and the product-specific Shopify/Monzo forum adapter are retained but disabled by default.
 
 ## Sources
 
@@ -14,10 +14,12 @@ V1 uses **Hacker News, Stack Exchange, public Shopify/Monzo forums, and supporti
 | Reddit | SaaS, startups, smallbusiness, webdev, devops, selfhosted | Disabled; requires approved access, free eligibility varies |
 | X | People seeking tools, alternatives, and missing products | Disabled; paid API credits required |
 | GitHub Issues | Public open issues relevant to the selected audiences, as supporting evidence | Enabled; public reads, token optional |
-| Stack Exchange | Freelancing, Parenting, Seasoned Advice (cooking), Home Improvement, Travel, and relevant Software Recommendations questions | Enabled; public reads, API key optional |
-| Public forums (`discourse`) | Shopify merchants and Monzo everyday money-management discussions | Enabled; public reads without credentials |
+| Stack Exchange | Freelancing, The Workplace, Parenting, Seasoned Advice (cooking), Home Improvement, Travel, and Personal Finance & Money | Enabled; public reads, API key optional |
+| Product forums (`discourse`) | Shopify and Monzo product feedback, as supporting evidence only | Disabled by default; public access policy must permit reads |
 
-These are research leads, not verified buyers. GitHub issues and Stack Exchange questions can indicate ordinary support needs rather than product demand. The default lookback is **180 days**. HN, Stack Exchange, and the public forums sample the last 30 days and days 31–180 separately, ordered by search relevance within each band. GitHub uses best-match search over the requested window. Searches use the first page only; this is a sample, not an exhaustive archive.
+These are research leads, not verified buyers. GitHub issues and Stack Exchange questions can indicate ordinary support needs rather than product demand. The default lookback is **180 days**. HN and Stack Exchange sample the last 30 days and days 31–180 separately, ordered by search relevance within each band. GitHub uses best-match search over the requested window. Searches use the first page only; this is a sample, not an exhaustive archive.
+
+Sources are selected for task-related discussions, complete evidence with dates and author/thread attribution, and usable public access. Convenience of an endpoint is insufficient. `metis sources` explains each source's selection reason, evidence role, and coverage limit. HN remains technology-biased; Stack Exchange contains many advice questions. These sources do not represent the whole market.
 
 ## Audiences
 
@@ -54,7 +56,7 @@ An editable checkout reads `.env` from the repository root. An installed wheel r
 metis sources
 
 # Public sources, no credentials needed (subject to provider limits).
-metis run --sources hackernews,github,stackexchange,discourse --limit 50 --days 180
+metis run --sources hackernews,github,stackexchange --limit 50 --days 180
 
 # Default v1: free sources, small businesses and everyday life.
 metis run --limit 50
@@ -89,11 +91,13 @@ METIS_STACKEXCHANGE_QUERIES='["workflow", "alternative"]'
 
 GitHub searches always restrict results to public open issues. Lookback is based on creation time. Limits are ceilings, not guaranteed result counts. Each source has a shared 60-second budget for posts and comments (an in-flight request may finish later). Search collection allows at most 20 HTTP attempts for HN and Stack Exchange, 30 for public forums including full-post reads, and 10 for the other sources, including retries. Custom query lists that exceed the cap produce an explicit partial result. `--limit` caps search matches per source, including HN comment matches; bounded thread enrichment is additional. Rate limits stop that source for the current run. Transient network/server failures receive bounded retries.
 
-## Public merchant and household forums
+## Deferred product forums
 
-The `discourse` collector uses the public [Shopify Community](https://community.shopify.com/) and [Monzo Community](https://community.monzo.com/) JSON endpoints. It selects the forum by audience, runs one focused query per forum across the requested age bands, and fetches up to five full opening posts per search (at most 20 posts across both forums and bands). It spaces search requests, deduplicates IDs within each host, respects access/rate failures, and never scores truncated search snippets. It reads opening posts only; forum replies are not sampled. A rate limit stops requests to that forum while preserving completed full posts and allowing the other forum to finish within the shared budget.
+The retained `discourse` collector targets [Shopify Community](https://community.shopify.com/) and [Monzo Community](https://community.monzo.com/). Both discuss a particular vendor's product. They are disabled by default, and their posts are always supporting evidence, including previously saved posts. They cannot create a lead, an idea, or a recurrence/priority boost. Reanalyze with `--sources hackernews,github,stackexchange,discourse` to include saved forum evidence without collecting again.
 
-This is limited coverage, not representation of every occupation or household. Both are product communities, so ordinary support requests, feature requests, promotions, and research solicitations still need careful separation. Sources can produce no qualifying candidates; Metis does not fill audience quotas with weak evidence.
+If explicitly enabled for collection, the adapter checks `robots.txt` before searching or fetching full posts; denied, redirected, or unreadable policy stops that forum. At the October 23, 2026 check, both forums disallowed their search paths. It never switches identities or endpoints to bypass a denial. When access permits, requests are bounded to one query per forum and age band and up to five full opening posts per search, with a shared 30-attempt budget. Search snippets are never scored.
+
+The source review also checked general forums: UK Business Forum's RSS exposed truncated bodies and activity dates that can belong to old threads; MoneySavingExpert could not be read by the supported local HTTP runtime; the sampled Oh My Dollar/Penny Hoarder searches returned no matches and their crawl policies restrict search. None was added to the collector list. A public forum needs reliable full text, original dates, suitable access, and evidence of useful coverage before becoming a default source.
 
 ## Selective comments
 
@@ -105,11 +109,13 @@ Comments have their own IDs, authors, timestamps, and URLs, plus `kind: comment`
 
 ## Output and failure handling
 
-CLI stdout is JSON; progress logs go to stderr. Exit codes: `0` success, `2` partial collection, `1` failure. Reddit/X appear as `disabled` in the default configuration. If explicitly enabled later, missing credentials appear as `unconfigured` while other sources continue. `metis sources` reports configuration readiness, not verified API permission.
+CLI stdout is JSON; progress logs go to stderr. Exit codes: `0` success, `2` partial collection, `1` failure. Reddit/X/product forums appear as `disabled` in the default configuration. If explicitly enabled later, missing credentials appear as `unconfigured` while other sources continue. `metis sources` reports configuration readiness, not verified API permission.
 
 A completely failed collection preserves the last analysis on disk. The failed run includes cached analysis only when its analysis version, `selected_sources`, `selected_audiences`, and `window_days` match the request, with `analysis_reused: true`. Retrieval commands return the saved analysis scope, timestamp, and `latest_collection`; `collection_newer_than_analysis` flags a subsequent collection attempt. Check these fields before treating saved leads as current. Watch mode reports temporary storage errors as JSON and tries again at the next scheduled interval. After upgrading, run `metis analyze` to refresh older saved output with the current rules.
 
-Each lead includes `source`, `community`, source-qualified `post_id`, full body, discussion URL, author, creation time, matched phrases, evidence excerpt, lead type, `lead_quality`, and a heuristic priority score with `score_breakdown`. `leads` contains primary community opportunity candidates. Every GitHub issue/comment has `evidence_role: supporting` and appears in `supporting_evidence` when it has a non-noise signal; it cannot create an opportunity or increase repeat/priority counts. `candidates` exposes all quality classes and both evidence roles for review. Popularity alone does not qualify a post. Scores are not purchase probabilities.
+Each lead includes `source`, `community`, source-qualified `post_id`, full body, discussion URL, author, creation time, matched phrases, evidence excerpt, lead type, `lead_quality`, and a heuristic priority score with `score_breakdown`. `leads` contains primary community opportunity candidates. Every GitHub issue/comment and Shopify/Monzo forum post has `evidence_role: supporting` and appears in `supporting_evidence` when it has a non-noise signal; it cannot create an opportunity or increase repeat/priority counts. `source_context` and `coverage_limit` explain this distinction. `candidates` exposes all quality classes and both evidence roles for review. Popularity alone does not qualify a post. Scores are not purchase probabilities.
+
+`community_coverage` in analysis and retrieval output reports analyzed records, primary candidates, supporting records, and noise per community, including empty selected Stack Exchange communities. These are observed yields, not measured precision. Clusters expose `independent_community_count` and `corroboration`: `not_established`, `same_community_theme`, or `cross_community_theme`. Supporting product evidence never changes these counts. Even cross-community themes require review to confirm the same unresolved problem and willingness to pay.
 
 The rules favor explicit willingness to pay, searches for products, unmet capabilities, and recurring or costly work in the selected business, household, or developer contexts. They discount ordinary support, common negations, promotions, hiring, bots, code samples, and blockquotes. Recency adds no score. `age_days`, `freshness` (recent/historical/unknown), and `current_need_verified: false` keep age separate from intent. Historical requests need a fresh check before outreach; publication age alone does not show that a problem persists. Headlines that merely describe alternatives, recruiting, surveys, and tutorial instructions are discounted. These are English rules and can miss intent or mistake implementation tasks for market demand.
 
@@ -155,7 +161,7 @@ python -m pip install -e '.[dev]'
 python -m ruff check .
 python -m pytest -q
 python -m build
-python scripts/check_wheel.py dist/metis-0.5.0-py3-none-any.whl
+python scripts/check_wheel.py dist/metis-0.6.0-py3-none-any.whl
 ```
 
 GitHub Actions runs these checks on Python 3.9 and 3.14 for pushes and pull requests. Tests use mocked HTTP responses and temporary databases; they do not consume API credits. The wheel check installs dependencies from PyPI, then verifies configuration, local analysis, and storage outside the checkout without contacting source platforms. It does not schedule collection.

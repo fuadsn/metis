@@ -27,22 +27,23 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 COLLECTION_INTERVAL_HOURS = 6
 DEFAULT_WINDOW_DAYS = 180
-ANALYSIS_VERSION = 5
+ANALYSIS_VERSION = 6
 SOURCE_NAMES = ("hackernews", "reddit", "x", "github", "stackexchange", "discourse")
-DEFAULT_SOURCES = ("hackernews", "github", "stackexchange", "discourse")
+DEFAULT_SOURCES = ("hackernews", "github", "stackexchange")
 AUDIENCE_NAMES = ("small_business", "everyday_life", "developer_tools")
 DEFAULT_AUDIENCES = ("small_business", "everyday_life")
 STACKEXCHANGE_SEARCHES = {
     "small_business": [
         ("freelancing", "client"),
-        ("softwarerecs", "booking"),
-        ("softwarerecs", "invoicing"),
+        ("freelancing", "payment"),
+        ("workplace", "scheduling"),
     ],
     "everyday_life": [
         ("parenting", "routine"),
         ("cooking", "planning"),
         ("diy", "maintenance"),
         ("travel", "booking"),
+        ("money", "budgeting"),
     ],
     "developer_tools": [
         ("softwarerecs", "workflow"),
@@ -186,7 +187,14 @@ class Settings:
                 else ["looking for", "manually"]
             )
             return [(site, query) for site in sites for query in queries]
-        return plan
+        # Rotate across audiences before applying the 20-request / two-band cap.
+        interleaved = [
+            STACKEXCHANGE_SEARCHES[a][i]
+            for i in range(max(len(STACKEXCHANGE_SEARCHES[a]) for a in self.audiences))
+            for a in self.audiences
+            if i < len(STACKEXCHANGE_SEARCHES[a])
+        ]
+        return list(dict.fromkeys(interleaved))[:10]
 
     def __post_init__(self):
         if not self.audiences or set(self.audiences) - set(AUDIENCE_NAMES):
@@ -206,7 +214,11 @@ class Settings:
         }
         hn = {
             "small_business": ['"appointments" "looking for"', '"invoices" "manually"'],
-            "everyday_life": ['"family" "looking for"', '"meal planning"'],
+            "everyday_life": [
+                '"family" "looking for"',
+                '"meal planning"',
+                '"childcare" "looking for"',
+            ],
             "developer_tools": [
                 '"looking for" "tool"',
                 '"looking for" "software"',

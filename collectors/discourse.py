@@ -3,6 +3,7 @@
 import time
 from datetime import datetime, timezone
 from math import ceil
+from urllib.robotparser import RobotFileParser
 
 from collectors.base import CollectionError, Collector, StopCollection
 from collectors.search import age_windows
@@ -13,6 +14,7 @@ SITES = {
     "small_business": ("community.shopify.com", "manually"),
     "everyday_life": ("community.monzo.com", '"every week"'),
 }
+USER_AGENT = "Metis/0.6 (+https://github.com/fuadsn/metis)"
 
 
 class DiscourseCollector(Collector):
@@ -41,6 +43,16 @@ class DiscourseCollector(Collector):
                 self.result.errors.append(f"{host}: {exc}")
 
     def _forum(self, host, query, windows, per_search, limit):
+        robots = RobotFileParser()
+        headers = {"User-Agent": USER_AGENT}
+        policy = self.request(
+            "GET", f"https://{host}/robots.txt", as_text=True, headers=headers
+        )
+        if "user-agent:" not in policy.lower():
+            raise StopCollection("Public search policy unavailable; forum skipped")
+        robots.parse(policy.splitlines())
+        if not robots.can_fetch(USER_AGENT, f"https://{host}/search.json"):
+            raise StopCollection("robots.txt disallows public search; forum skipped")
         for band, start, end in windows:
             if len(self.result.posts) >= limit:
                 return
@@ -58,6 +70,7 @@ class DiscourseCollector(Collector):
                 data = self.request(
                     "GET",
                     f"https://{host}/search.json",
+                    headers=headers,
                     params={
                         "q": f"{query} in:first after:{after} before:{before} order:relevance",
                     },
@@ -90,8 +103,16 @@ class DiscourseCollector(Collector):
                 self.seen.add(identity)
                 topic = topics[hit["topic_id"]]
                 try:
+                    if not robots.can_fetch(
+                        USER_AGENT, f"https://{host}/posts/{int(hit['id'])}.json"
+                    ):
+                        raise StopCollection(
+                            "robots.txt disallows full-post reads; forum skipped"
+                        )
                     post = self.request(
-                        "GET", f"https://{host}/posts/{int(hit['id'])}.json"
+                        "GET",
+                        f"https://{host}/posts/{int(hit['id'])}.json",
+                        headers=headers,
                     )
                     if (
                         post.get("id") != int(hit["id"])

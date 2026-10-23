@@ -203,7 +203,12 @@ def cluster_pain_points(pain_points, supporting_evidence=None):
             for p in points
         }
         sources = sorted({p["source"] for p in points})
-        seen_threads, seen_authors, seen_texts = set(), set(), set()
+        seen_threads, seen_authors, seen_texts, seen_communities = (
+            set(),
+            set(),
+            set(),
+            set(),
+        )
         for point in points:
             thread = point.get("parent_id") or point["post_id"]
             author = author_key(point)
@@ -220,6 +225,7 @@ def cluster_pain_points(pain_points, supporting_evidence=None):
                 seen_threads.add(thread)
                 seen_authors.add(author)
                 seen_texts.add(content)
+                seen_communities.add((point["source"], point.get("community", "")))
         independent = len(seen_threads)
         repeated = independent >= 2 and topic != "other"
         dates = [p["created_utc"] for p in points if p.get("created_utc")]
@@ -242,6 +248,12 @@ def cluster_pain_points(pain_points, supporting_evidence=None):
                 "distinct_text_count": len(texts),
                 "repeat_evidence_count": independent,
                 "repeated_need": repeated,
+                "independent_community_count": len(seen_communities),
+                "corroboration": "not_established"
+                if not repeated
+                else "cross_community_theme"
+                if len(seen_communities) > 1
+                else "same_community_theme",
                 "repeat_validation": "related_theme_only; review original evidence to confirm the same need",
                 "evidence_span_days": int((max(dates) - min(dates)) / 86400)
                 if dates

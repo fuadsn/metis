@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — Independent demand and source accountability
+
+- Disable Shopify/Monzo collection by default and classify their existing evidence as supporting only, matching the GitHub rule. Vendor feedback cannot create a lead or inflate recurrence and priority.
+- Search freelance payments, workplace scheduling, and household budgeting through topic communities; remove business-profile Software Recommendations searches and retain developer research as optional.
+- Explain source selection and limitations, report per-community candidate yield including empty selected communities, and distinguish same-community from cross-community themes.
+- Exclude proposal-promotion calls from customer demand and retain conservative intent rules for ordinary advice.
+- Check public forum crawl policy before optional reads; stop on denied search paths, unreadable policy, or redirects.
+- Upgrade analysis to version 6; run `metis analyze` to refresh saved results. Remove `discourse` from existing `METIS_SOURCES` to adopt the new defaults.
+
 ## 0.5.0 — Small businesses and everyday life
 
 - Default research audiences now cover small businesses and everyday people. Developer tools remain selectable with `--audiences developer_tools`.

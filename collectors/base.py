@@ -175,7 +175,7 @@ class Collector:
         finally:
             self.result.comment_requests = self.result.requests - before
 
-    def request(self, method, url, **kwargs):
+    def request(self, method, url, *, as_text=False, **kwargs):
         for attempt in range(3):
             if self.result.requests >= self.request_limit:
                 raise StopCollection(
@@ -204,6 +204,10 @@ class Collector:
             if response.status_code >= 500 and attempt < 2:
                 time.sleep(0.25 * 2**attempt)
                 continue
+            if 300 <= response.status_code < 400:
+                raise StopCollection(
+                    "Source redirected the request; collection stopped"
+                )
             if response.status_code >= 400:
                 hints = {
                     401: "check credentials",
@@ -218,6 +222,8 @@ class Collector:
                 raise error(
                     f"HTTP {response.status_code}: {hints.get(response.status_code, 'source request failed')}"
                 )
+            if as_text:
+                return response.text
             try:
                 return response.json()
             except ValueError:

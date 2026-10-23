@@ -98,7 +98,14 @@ AUDIENCE_TERMS = {
 }
 COMMUNITIES = {
     "small_business": {"freelancing", "community.shopify.com"},
-    "everyday_life": {"parenting", "cooking", "diy", "travel", "community.monzo.com"},
+    "everyday_life": {
+        "parenting",
+        "cooking",
+        "diy",
+        "travel",
+        "money",
+        "community.monzo.com",
+    },
     "developer_tools": {"stackoverflow", "serverfault"},
 }
 

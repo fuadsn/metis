@@ -9,6 +9,7 @@ from config import ANALYSIS_VERSION, DEFAULT_WINDOW_DAYS, SOURCE_NAMES, Settings
 from generators import generate_ideas
 from processors import clean_posts, cluster_pain_points
 from processors.cleaner import rank_candidates
+from processors.source_context import community_coverage, source_context
 from storage import Store
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def source_status(settings=None):
                 else "ready",
                 "missing": missing,
                 "access_verified": False,
-                "evidence_role": "supporting" if name == "github" else "primary",
+                **source_context(name),
             }
         )
     return {
@@ -109,6 +110,7 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
         "lead_audience_counts": dict(Counter(p["primary_audience"] for p in leads)),
         "supporting_evidence_count": len(supporting),
         "source_counts": dict(Counter(p["source"] for p in posts)),
+        "community_coverage": community_coverage(candidates, leads, settings),
         "pain_points_count": len(points),
         "clusters_count": len(clusters),
         "ideas_count": len(ideas),

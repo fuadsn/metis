@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from config import PAIN_KEYWORDS
 from processors.audiences import AUDIENCE_TERMS, classify_audiences, primary_audience
+from processors.source_context import source_context
 
 BUYING = ("would pay", "will pay", "willing to pay", "budget for")
 SEARCH = (
@@ -174,7 +175,7 @@ def score_post(post, now=None):
     if "looking for" in search and (
         re.search(PEOPLE_SEARCH, normalized)
         or re.search(
-            r"\blooking for (?:some |any )?(?:materials?|books?|courses?)\b|\b(?:was|were|instead of) looking for\b",
+            r"\blooking for (?:some |any |a |an )?(?:materials?|books?|courses?|mental model|conceptual framework)\b|\b(?:was|were|instead of) looking for\b",
             normalized,
         )
     ):
@@ -268,6 +269,12 @@ def score_post(post, now=None):
             normalized,
         )
     )
+    process_request = re.search(
+        r"\b(?:i(?:'m| am)|we(?:'re| are)) (?:particularly )?(?:looking for|interested in) (?:a|an|some) (?:simpler |better |reliable )?(?:way|method|system|approach|service)\b[^.!?\n]{0,150}\b(?:manage|organize|organise|track|schedule|coordinate|plan|maintain|budget)\b",
+        normalized,
+    )
+    if process_request and recurring and affirmed(process_request.group(), text):
+        search.append(process_request.group())
     # A manual action in a tutorial is not evidence of a recurring unmet need.
     if not firsthand or not (recurring or time_cost or search or unmet):
         burden = []
@@ -294,26 +301,45 @@ def score_post(post, now=None):
             normalized,
         )
     )
-    hiring = bool(
-        re.search(
-            r"\b(?:looking for (?:a )?(?:job|work|employment|internship)|we(?:'re| are) hiring)\b",
-            matching_text(text),
+    hiring = (
+        bool(
+            re.search(
+                r"\b(?:looking for (?:a )?(?:job|work|employment|internship)|we(?:'re| are) hiring)\b",
+                matching_text(text),
+            )
         )
-    ) or bool(re.search(PEOPLE_SEARCH, normalized))
+        or bool(re.search(PEOPLE_SEARCH, normalized))
+        or bool(
+            re.search(
+                r"^ask hn: (?:who is hiring|who wants to be hired)\?",
+                post.get("metadata", {}).get("parent_title", ""),
+                re.I,
+            )
+        )
+    )
     bot = (
         post.get("author", "").lower().endswith("[bot]")
         or post.get("metadata", {}).get("author_type") == "Bot"
     )
-    solicitation = bool(
-        re.search(
-            r"community wishlist|feature request template|feature ideas\s*(?:&|and)\s*requests",
-            post.get("title", ""),
-            re.I,
+    solicitation = (
+        bool(
+            re.search(
+                r"community wishlist|feature request template|feature ideas\s*(?:&|and)\s*requests",
+                post.get("title", ""),
+                re.I,
+            )
         )
-    ) or bool(
-        re.search(
-            r"\b(?:i'm|i am|we are|we're) (?:trying to understand|curious (?:what|how)|researching how|affiliated with)\b",
-            normalized,
+        or bool(
+            re.search(
+                r"\b(?:i'm|i am|we are|we're) (?:trying to understand|curious (?:what|how)|researching how|affiliated with)\b",
+                normalized,
+            )
+        )
+        or bool(
+            re.search(
+                r"\b(?:please )?(?:support|upvote|like|star) (?:this|my|our|the) (?:proposal|project|issue)\b",
+                normalized,
+            )
         )
     )
     components = {"explicit_signal": 10 if candidate else 0}
@@ -380,7 +406,7 @@ def score_post(post, now=None):
         "primary_audience": primary_audience(post, audience_signals),
         "audience_signals": audience_signals,
         "audience_method": "explicit_text_and_community_context; labels describe the topic, not a verified personal profile",
-        "evidence_role": "supporting" if post.get("source") == "github" else "primary",
+        **source_context(post.get("source")),
         "age_days": round(age, 1) if age is not None and age >= 0 else None,
         "freshness": "unknown"
         if age is None or age < 0
@@ -407,7 +433,7 @@ def score_post(post, now=None):
             dict.fromkeys(keywords + buying + search + unmet + burden)
         ),
         "evidence_excerpt": excerpt[:600],
-        "scoring_method": "intent_heuristic_v4",
+        "scoring_method": "intent_heuristic_v5",
     }
 
 

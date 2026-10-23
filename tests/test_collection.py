@@ -45,14 +45,14 @@ def test_default_run_never_calls_deferred_sources_even_with_credentials(
         def __init__(self, config):
             pytest.fail("Default v1 collection must not call Reddit or X")
 
-    for source in ("hackernews", "github", "stackexchange", "discourse"):
+    for source in ("hackernews", "github", "stackexchange"):
         monkeypatch.setitem(COLLECTORS, source, free_collector(source))
-    for source in ("reddit", "x"):
+    for source in ("reddit", "x", "discourse"):
         monkeypatch.setitem(COLLECTORS, source, DeferredCollector)
     assert cli.main(["run", "--limit", "1"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "success"
-    assert called == ["hackernews", "github", "stackexchange", "discourse"]
+    assert called == ["hackernews", "github", "stackexchange"]
 
 
 def settings(**kwargs):
@@ -482,7 +482,7 @@ def test_failed_collection_preserves_last_analysis_without_mixing_scope(
     store = Store(tmp_path)
     previous = {
         "schema_version": 2,
-        "analysis_version": 5,
+        "analysis_version": 6,
         "status": "success",
         "leads": [{"post_id": f"{(scope or ['github'])[0]}:1"}],
         "window_days": window,

@@ -129,6 +129,7 @@ def latest(kind, limit=20, source=None, store=None, quality=None, audience=None)
         "lead_source_counts": data.get("lead_source_counts", {}),
         "lead_age_counts": data.get("lead_age_counts", {}),
         "supporting_evidence_count": data.get("supporting_evidence_count", 0),
+        "community_coverage": data.get("community_coverage", []),
         "latest_collection": collection,
         "collection_newer_than_analysis": bool(
             collection

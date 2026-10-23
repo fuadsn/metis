@@ -165,6 +165,8 @@ def test_source_and_audience_cli_filters_return_matching_saved_results(
 def forum_handler(calls, missing_raw=False, fail_full=False):
     def handler(request):
         calls.append(request)
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
         if request.url.path == "/search.json":
             assert "in:first" in request.url.params["q"]
             assert (
@@ -214,7 +216,7 @@ def test_public_forum_fetches_full_posts_deduplicates_and_preserves_provenance()
             Settings(audiences=["small_business"]), client
         ).collect(limit=10, days=30)
     assert result.status == "success"
-    assert len(calls) == 2  # one search plus one full post
+    assert len(calls) == 3  # robots policy, search, full post
     assert len(result.posts) == 1
     p = result.posts[0]
     assert p["id"] == "discourse:community.shopify.com:topic:7"
@@ -300,6 +302,8 @@ def test_forum_rejected_search_does_not_prevent_other_host_collection(payload):
 
     def handler(request):
         if request.url.host == "community.shopify.com":
+            if request.url.path == "/robots.txt":
+                return base(request)
             calls.append(request)
             return httpx.Response(200, json=payload)
         return base(request)
@@ -311,7 +315,7 @@ def test_forum_rejected_search_does_not_prevent_other_host_collection(payload):
     assert result.status == "partial"
     assert len(result.posts) == 1
     assert result.posts[0]["community"] == "community.monzo.com"
-    assert sum(r.url.host == "community.shopify.com" for r in calls) == 1
+    assert sum(r.url.host == "community.shopify.com" for r in calls) == 2
 
 
 def test_audience_hints_from_community_alone_cannot_create_intent():
@@ -379,6 +383,8 @@ def test_large_forum_searches_remain_within_full_post_and_http_budgets():
 
     def handler(request):
         calls.append(request)
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
         if request.url.path == "/search.json":
             day = request.url.params["q"].split("after:")[1].split()[0]
             created = (
@@ -420,4 +426,4 @@ def test_large_forum_searches_remain_within_full_post_and_http_budgets():
         ).collect(limit=500)
     assert result.status == "success"
     assert len(result.posts) == 20
-    assert len(calls) == 24
+    assert len(calls) == 26
