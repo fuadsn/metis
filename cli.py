@@ -4,7 +4,13 @@ import logging
 import sqlite3
 import sys
 
-from config import ANALYSIS_VERSION, DEFAULT_WINDOW_DAYS, SOURCE_NAMES, Settings
+from config import (
+    ANALYSIS_VERSION,
+    AUDIENCE_NAMES,
+    DEFAULT_WINDOW_DAYS,
+    SOURCE_NAMES,
+    Settings,
+)
 from models import REVIEW_LABELS, timestamp
 from pipeline import collect_posts, run_analysis, run_pipeline, source_status
 from processors.evaluation import evaluate_reviews
@@ -29,6 +35,9 @@ def bounded_int(minimum, maximum):
 
 
 def add_collection_arguments(parser, include_limit=True):
+    parser.add_argument(
+        "--audiences", help="Comma-separated audiences: " + ",".join(AUDIENCE_NAMES)
+    )
     parser.add_argument(
         "--sources", help="Comma-separated sources: " + ",".join(SOURCE_NAMES)
     )
@@ -57,11 +66,17 @@ def add_collection_arguments(parser, include_limit=True):
     )
 
 
-def settings_for(sources=None, comment_threads=None, comments_per_thread=None):
+def settings_for(
+    sources=None, comment_threads=None, comments_per_thread=None, audiences=None
+):
     overrides = {}
     if sources is not None:
         overrides["sources"] = [
             source.strip() for source in sources.split(",") if source.strip()
+        ]
+    if audiences is not None:
+        overrides["audiences"] = [
+            part.strip() for part in audiences.split(",") if part.strip()
         ]
     for key, value in (
         ("comment_threads", comment_threads),
@@ -72,7 +87,7 @@ def settings_for(sources=None, comment_threads=None, comments_per_thread=None):
     return Settings(**overrides)
 
 
-def latest(kind, limit=20, source=None, store=None, quality=None):
+def latest(kind, limit=20, source=None, store=None, quality=None, audience=None):
     if limit < 1:
         raise ValueError("limit must be positive")
     store = store or Store()
@@ -99,11 +114,15 @@ def latest(kind, limit=20, source=None, store=None, quality=None):
         ]
     if quality:
         items = [item for item in items if item.get("lead_quality") == quality]
+    if audience:
+        items = [item for item in items if audience in item.get("audiences", [])]
     collection = store.load_result("latest_collection.json")
     return {
         "status": "success",
         "processed_at": data.get("processed_at"),
         "selected_sources": data.get("selected_sources"),
+        "selected_audiences": data.get("selected_audiences"),
+        "lead_audience_counts": data.get("lead_audience_counts", {}),
         "window_days": data.get("window_days"),
         "analysis_status": data.get("status", "unknown"),
         "analysis_version": data.get("analysis_version"),
@@ -135,7 +154,7 @@ def run_safely(action):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="metis", description="Startup and developer-tool opportunity research"
+        prog="metis", description="Find unmet needs across businesses and everyday life"
     )
     subparsers = parser.add_subparsers(dest="command")
     for name in ("collect", "analyze", "run"):
@@ -146,10 +165,12 @@ def main(argv=None):
         "sources", help="Show configuration readiness without network calls"
     )
     status_parser.add_argument("--sources")
+    status_parser.add_argument("--audiences")
     for name in ("leads", "ideas", "clusters", "candidates", "supporting_evidence"):
         command = subparsers.add_parser(name)
         command.add_argument("--limit", type=bounded_int(1, 1000), default=20)
         command.add_argument("--source", choices=SOURCE_NAMES)
+        command.add_argument("--audience", choices=AUDIENCE_NAMES)
         if name == "candidates":
             command.add_argument("--quality", choices=REVIEW_LABELS)
     review = subparsers.add_parser(
@@ -180,6 +201,7 @@ def main(argv=None):
                 args.limit,
                 args.source,
                 quality=getattr(args, "quality", None),
+                audience=args.audience,
             )
         if args.command == "review":
             return Store().save_review(args.post_id, args.label, args.note)
@@ -189,6 +211,7 @@ def main(argv=None):
             args.sources,
             getattr(args, "comment_threads", None),
             getattr(args, "comments_per_thread", None),
+            args.audiences,
         )
         if args.command == "sources":
             return source_status(settings)

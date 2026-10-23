@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
@@ -27,9 +27,29 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 COLLECTION_INTERVAL_HOURS = 6
 DEFAULT_WINDOW_DAYS = 180
-ANALYSIS_VERSION = 4
-SOURCE_NAMES = ("hackernews", "reddit", "x", "github", "stackexchange")
-DEFAULT_SOURCES = ("hackernews", "github", "stackexchange")
+ANALYSIS_VERSION = 5
+SOURCE_NAMES = ("hackernews", "reddit", "x", "github", "stackexchange", "discourse")
+DEFAULT_SOURCES = ("hackernews", "github", "stackexchange", "discourse")
+AUDIENCE_NAMES = ("small_business", "everyday_life", "developer_tools")
+DEFAULT_AUDIENCES = ("small_business", "everyday_life")
+STACKEXCHANGE_SEARCHES = {
+    "small_business": [
+        ("freelancing", "client"),
+        ("softwarerecs", "booking"),
+        ("softwarerecs", "invoicing"),
+    ],
+    "everyday_life": [
+        ("parenting", "routine"),
+        ("cooking", "planning"),
+        ("diy", "maintenance"),
+        ("travel", "booking"),
+    ],
+    "developer_tools": [
+        ("softwarerecs", "workflow"),
+        ("serverfault", "automation"),
+        ("stackoverflow", "alternative"),
+    ],
+}
 PAIN_KEYWORDS = [
     "tired of",
     "sick of",
@@ -70,6 +90,8 @@ def csv_env(name, default):
 
 
 def queries_env(name, default):
+    if default is None and not os.getenv(name):
+        return None
     value = json.loads(os.environ[name]) if os.getenv(name) else default
     if (
         not isinstance(value, list)
@@ -82,6 +104,9 @@ def queries_env(name, default):
 
 @dataclass
 class Settings:
+    audiences: List[str] = field(
+        default_factory=lambda: csv_env("METIS_AUDIENCES", ",".join(DEFAULT_AUDIENCES))
+    )
     comment_threads: int = field(
         default_factory=lambda: int(os.getenv("METIS_COMMENT_THREADS", "3"))
     )
@@ -117,27 +142,11 @@ class Settings:
     stackexchange_key: str = field(
         default_factory=lambda: os.getenv("STACKEXCHANGE_KEY", ""), repr=False
     )
-    github_queries: List[str] = field(
-        default_factory=lambda: queries_env(
-            "METIS_GITHUB_QUERIES",
-            [
-                '"feature request" "workflow" in:title,body',
-                '"workaround" "deployment" in:title,body',
-                '"looking for" "integration" in:title,body',
-            ],
-        )
+    github_queries: Optional[List[str]] = field(
+        default_factory=lambda: queries_env("METIS_GITHUB_QUERIES", None)
     )
-    hackernews_queries: List[str] = field(
-        default_factory=lambda: queries_env(
-            "METIS_HACKERNEWS_QUERIES",
-            [
-                '"looking for" "tool"',
-                '"looking for" "software"',
-                '"manually" "every"',
-                '"I would pay"',
-                '"recommend" "tool"',
-            ],
-        )
+    hackernews_queries: Optional[List[str]] = field(
+        default_factory=lambda: queries_env("METIS_HACKERNEWS_QUERIES", None)
     )
     x_queries: List[str] = field(
         default_factory=lambda: queries_env(
@@ -147,18 +156,77 @@ class Settings:
             ],
         )
     )
-    stackexchange_sites: List[str] = field(
-        default_factory=lambda: csv_env(
-            "METIS_STACKEXCHANGE_SITES", "softwarerecs,serverfault,stackoverflow"
-        )
+    stackexchange_sites: Optional[List[str]] = field(
+        default_factory=lambda: csv_env("METIS_STACKEXCHANGE_SITES", "") or None
     )
-    stackexchange_queries: List[str] = field(
-        default_factory=lambda: queries_env(
-            "METIS_STACKEXCHANGE_QUERIES", ["workflow", "alternative"]
-        )
+    stackexchange_queries: Optional[List[str]] = field(
+        default_factory=lambda: queries_env("METIS_STACKEXCHANGE_QUERIES", None)
     )
 
+    def stackexchange_searches(self):
+        plan = list(
+            dict.fromkeys(
+                pair
+                for audience in self.audiences
+                for pair in STACKEXCHANGE_SEARCHES[audience]
+            )
+        )
+        if (
+            self.stackexchange_sites is not None
+            or self.stackexchange_queries is not None
+        ):
+            sites = (
+                self.stackexchange_sites
+                if self.stackexchange_sites is not None
+                else list(dict.fromkeys(site for site, _ in plan))
+            )
+            queries = (
+                self.stackexchange_queries
+                if self.stackexchange_queries is not None
+                else ["looking for", "manually"]
+            )
+            return [(site, query) for site in sites for query in queries]
+        return plan
+
     def __post_init__(self):
+        if not self.audiences or set(self.audiences) - set(AUDIENCE_NAMES):
+            raise ValueError("audiences must contain: " + ", ".join(AUDIENCE_NAMES))
+        self.audiences = list(dict.fromkeys(self.audiences))
+        github = {
+            "small_business": [
+                '"appointments" "manual" in:title,body',
+                '"inventory" "workaround" in:title,body',
+            ],
+            "everyday_life": ['"family" "calendar" in:title,body'],
+            "developer_tools": [
+                '"feature request" "workflow" in:title,body',
+                '"workaround" "deployment" in:title,body',
+                '"looking for" "integration" in:title,body',
+            ],
+        }
+        hn = {
+            "small_business": ['"appointments" "looking for"', '"invoices" "manually"'],
+            "everyday_life": ['"family" "looking for"', '"meal planning"'],
+            "developer_tools": [
+                '"looking for" "tool"',
+                '"looking for" "software"',
+                '"manually" "every"',
+                '"I would pay"',
+                '"recommend" "tool"',
+            ],
+        }
+        # Interleave selected audiences within existing request budgets.
+        if self.github_queries is None:
+            self.github_queries = [
+                github[a][i]
+                for i in range(3)
+                for a in self.audiences
+                if i < len(github[a])
+            ][:3]
+        if self.hackernews_queries is None:
+            self.hackernews_queries = [
+                hn[a][i] for i in range(5) for a in self.audiences if i < len(hn[a])
+            ][:5]
         if (
             not 0 <= self.comment_threads <= 5
             or not 1 <= self.comments_per_thread <= 10
@@ -179,6 +247,8 @@ class Settings:
             "stackexchange_queries",
         ):
             values = getattr(self, name)
+            if name == "stackexchange_queries" and values is None:
+                continue
             if not values or not all(
                 isinstance(value, str) and value.strip() for value in values
             ):

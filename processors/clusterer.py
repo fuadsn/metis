@@ -6,6 +6,43 @@ from collections import Counter, defaultdict
 from processors.signals import matches, signal_text
 
 TOPICS = {
+    "scheduling": (
+        "appointment",
+        "appointments",
+        "scheduling",
+        "calendar",
+        "booking",
+        "rota",
+        "shifts",
+    ),
+    "inventory": ("inventory", "stock", "suppliers", "restocking", "sku"),
+    "fulfillment": (
+        "shipping",
+        "delivery",
+        "deliveries",
+        "fulfillment",
+        "fulfilment",
+        "returns",
+    ),
+    "family_coordination": (
+        "family",
+        "childcare",
+        "school",
+        "children",
+        "caregiver",
+        "caregiving",
+        "chores",
+    ),
+    "meal_planning": ("meal", "meals", "groceries", "cooking", "recipes"),
+    "home_maintenance": (
+        "maintenance",
+        "repairs",
+        "cleaning",
+        "garden",
+        "landlord",
+        "tenant",
+    ),
+    "travel_planning": ("travel", "flight", "flights", "hotel", "holiday", "luggage"),
     "deploy": (
         "deploy",
         "deployment",
@@ -139,7 +176,11 @@ def author_key(point):
         "[bot]"
     ):
         return None
-    site = point.get("community", "") if point["source"] == "stackexchange" else ""
+    site = (
+        point.get("community", "")
+        if point["source"] in {"stackexchange", "discourse"}
+        else ""
+    )
     return (point["source"], site, author)
 
 
@@ -214,6 +255,9 @@ def cluster_pain_points(pain_points, supporting_evidence=None):
                 "priority_score": priority,
                 "grouping_method": "synonym_need_rules_v1",
                 "sources": sources,
+                "audiences": sorted(
+                    {a for p in points for a in p.get("audiences", [])}
+                ),
                 "avg_score": sum(p.get("score", 0) for p in points) / len(points),
                 "subreddits": sorted(
                     {p["community"] for p in points if p.get("community")}

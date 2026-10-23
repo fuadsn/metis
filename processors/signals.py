@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from config import PAIN_KEYWORDS
+from processors.audiences import AUDIENCE_TERMS, classify_audiences, primary_audience
 
 BUYING = ("would pay", "will pay", "willing to pay", "budget for")
 SEARCH = (
@@ -30,6 +31,13 @@ BURDEN = (
     "copy-paste",
     "time consuming",
     "time-consuming",
+    "keeping track",
+    "keep track",
+    "chasing",
+    "switching between",
+    "re-enter",
+    "struggling",
+    "struggle",
 )
 QUESTIONS = (
     "how do i",
@@ -80,7 +88,7 @@ DOMAIN = (
     "hosting",
     "documentation",
     "monitoring",
-)
+) + tuple(term for words in AUDIENCE_TERMS.values() for term in words)
 
 
 def matching_text(text):
@@ -108,6 +116,7 @@ def affirmed(phrase, text):
 def signal_text(text):
     # Preserve original bodies; quoted examples and code are not the author's intent.
     text = re.sub(r"```.*?(?:```|$)|~~~.*?(?:~~~|$)|<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(r"\[quote(?:=[^\]]*)?\].*?\[/quote\]", "", text, flags=re.S | re.I)
     text = re.sub(r"`[^`\n]+`|\b\w+\.\w+\([^\n)]*\)", "[code]", text)
     return "\n".join(
         line
@@ -122,7 +131,7 @@ def signal_text(text):
 
 
 PRODUCT = r"\b(?:tools?|software|services?|solutions?|platforms?|apps?|libraries|library|frameworks?|providers?|systems?|products?|automation|integrations?|hosting)\b"
-PERSON = r"\b(?:i|i'm|i've|we|we're|we've|my|our)\b"
+PERSON = r"\b(?:i|i'm|i've|we|we're|we've|my|our|as a parent|as a caregiver|as a shop owner)\b"
 PEOPLE_SEARCH = r"\blooking for\s+(?:(?:a|an|some|any|few|early|beta|full-stack|backend|frontend|dyslexic|senior|junior|software|java|data|ml)\s+){0,6}(?:engineers?|developers?|roles?|jobs?|employment|testers?|participants?)\b"
 
 
@@ -141,11 +150,17 @@ def score_post(post, now=None):
     )
     keywords = [phrase for phrase in PAIN_KEYWORDS if affirmed(phrase, text)]
     sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+    paragraphs = re.split(r"\n\s*\n", text)
     buying = [
         phrase
         for phrase in BUYING
         if any(
-            affirmed(phrase, sentence) and own_statement(phrase, sentence)
+            affirmed(phrase, sentence)
+            and own_statement(phrase, sentence)
+            and not re.search(
+                re.escape(phrase) + r"\s+(?:for\s+)?(?:nothing|zero)\b",
+                matching_text(sentence),
+            )
             for sentence in sentences
         )
     ]
@@ -202,6 +217,12 @@ def score_post(post, now=None):
     )
     if direct_request:
         search.append(direct_request.group())
+    practical_request = re.search(
+        r"\b(?:i|we) (?:need|want) (?:a|an|some|better) (?:better |easier |reliable )?(?:way|method|system|service) to (?:manage|organize|organise|track|schedule|coordinate|plan)\b[^.!?\n]{0,100}",
+        normalized,
+    )
+    if practical_request:
+        search.append(practical_request.group())
     unmet = [
         phrase
         for phrase in UNMET
@@ -222,17 +243,28 @@ def score_post(post, now=None):
             affirmed(phrase, sentence) and own_statement(phrase, sentence)
             for sentence in sentences
         )
+        or any(
+            affirmed(phrase, paragraph)
+            and re.search(PERSON, matching_text(paragraph))
+            and re.search(
+                r"\b(?:challenge|problem|pattern|struggling|struggle|have to|has to|only way|workaround)\b",
+                matching_text(paragraph),
+            )
+            for paragraph in paragraphs
+        )
     ]
     time_cost = re.search(
         r"\b(?:spends?|wastes?|loses?|takes|costs)\b[^.!?\n]{0,60}\b(?:hours?|days?)\b",
         normalized,
     )
+    if time_cost and not affirmed(time_cost.group(), text):
+        time_cost = None
     if time_cost:
         burden.append(time_cost.group())
     firsthand = bool(re.search(PERSON, normalized))
     recurring = bool(
         re.search(
-            r"\b(?:every|each|per|a) (?:day|week|month|release|deployment)\b|\b(?:daily|weekly|monthly|repeatedly|repetitive)\b",
+            r"\b(?:every|each|per|a) (?:day|week|weekday|month|release|deployment|monday|tuesday|wednesday|thursday|friday|saturday|sunday|sku|order|item|customer|time)\b|\b(?:daily|weekly|monthly|repeatedly|repetitive)\b",
             normalized,
         )
     )
@@ -256,6 +288,10 @@ def score_post(post, now=None):
         re.search(
             r"^(?:show|launch) hn:|\b(?:i|we) (?:built|launched|created)\b|\b(?:try|check out) my\b|\blooking for (?:a few |some |early |beta )*(?:testers|users|feedback)\b|\bworking mvp\b",
             matching_text(text),
+        )
+        or re.search(
+            r"\b(?:i(?:'m| am)|we(?:'re| are)) (?:building|launching)\b[^.!?\n]{0,80}\b(?:projects?|apps?|tools?|products?|services?|prototypes?)\b",
+            normalized,
         )
     )
     hiring = bool(
@@ -293,9 +329,10 @@ def score_post(post, now=None):
         if value:
             components[key] = points
     context = text + "\n" + post.get("metadata", {}).get("parent_title", "")
-    relevant = any(matches(word, context) for word in DOMAIN)
+    audience_signals = classify_audiences(post, context)
+    relevant = bool(audience_signals) or any(matches(word, context) for word in DOMAIN)
     if candidate and relevant:
-        components["startup_or_developer_context"] = 10
+        components["audience_context"] = 10
     created = post.get("created_utc")
     age = (
         ((now if now is not None else datetime.now(timezone.utc).timestamp()) - created)
@@ -339,6 +376,10 @@ def score_post(post, now=None):
     )
     return {
         "lead_quality": quality,
+        "audiences": list(audience_signals),
+        "primary_audience": primary_audience(post, audience_signals),
+        "audience_signals": audience_signals,
+        "audience_method": "explicit_text_and_community_context; labels describe the topic, not a verified personal profile",
         "evidence_role": "supporting" if post.get("source") == "github" else "primary",
         "age_days": round(age, 1) if age is not None and age >= 0 else None,
         "freshness": "unknown"
@@ -366,7 +407,7 @@ def score_post(post, now=None):
             dict.fromkeys(keywords + buying + search + unmet + burden)
         ),
         "evidence_excerpt": excerpt[:600],
-        "scoring_method": "intent_heuristic_v3",
+        "scoring_method": "intent_heuristic_v4",
     }
 
 

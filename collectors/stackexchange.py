@@ -13,8 +13,7 @@ class StackExchangeCollector(Collector):
     def _collect(self, limit, days):
         searches = [
             (site, query, band, start, end)
-            for site in self.settings.stackexchange_sites
-            for query in self.settings.stackexchange_queries
+            for site, query in self.settings.stackexchange_searches()
             for band, start, end in age_windows(days)
         ]
         if not searches:

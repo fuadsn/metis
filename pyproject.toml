@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metis"
-version = "0.4.0"
-description = "Find startup and developer-tool opportunities across public communities"
+version = "0.5.0"
+description = "Find unmet needs for small businesses and everyday life across public communities"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

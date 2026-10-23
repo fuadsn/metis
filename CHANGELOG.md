@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — Small businesses and everyday life
+
+- Default research audiences now cover small businesses and everyday people. Developer tools remain selectable with `--audiences developer_tools`.
+- Search freelancing, household, cooking, parenting, travel, and home-maintenance communities with audience-specific plans; add bounded public Shopify and Monzo forum reads without credentials.
+- Fetch complete forum opening posts, preserve provenance, strip quoted intent, and isolate per-forum rate/access failures while retaining successful evidence.
+- Recognize nontechnical recurring burdens and coordination needs; expose topic-based audience labels and filtering without treating the community as proof of demand.
+- Generate evidence-led research briefs for nontechnical opportunities instead of unrelated software templates.
+- Version saved analysis to 5, include audience scope in cache compatibility, and retain Reddit/X disabled. Remove stale developer-only `.env` overrides to adopt the new defaults.
+
 ## 0.4.0 — Community discovery with historical evidence
 
 - Search Ask HN and comment text instead of sampling current story feeds. Query recent and historical periods separately, with bounded requests and original author/thread attribution.

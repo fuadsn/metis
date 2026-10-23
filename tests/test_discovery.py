@@ -16,6 +16,11 @@ from storage import Store
 NOW = int(datetime.now(timezone.utc).timestamp())
 
 
+@pytest.fixture(autouse=True)
+def developer_research_scope(monkeypatch):
+    monkeypatch.setenv("METIS_AUDIENCES", "developer_tools")
+
+
 def evidence(source="hackernews", age=0, **overrides):
     return normalize_post(
         {

@@ -92,6 +92,40 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
         topic = cluster.get("topic", "other")
         count = cluster.get("count", 0)
 
+        if set(cluster.get("audiences", [])) & {"small_business", "everyday_life"}:
+            point = cluster["pain_points"][0]
+            ideas.append(
+                {
+                    "id": f"idea_{cluster['id']}_research",
+                    "cluster_id": cluster["id"],
+                    "topic": topic,
+                    "need": cluster.get("need", "general"),
+                    "audiences": cluster["audiences"],
+                    "description": "Investigate: "
+                    + (point.get("title") or point["evidence_excerpt"]),
+                    "problem_excerpt": point["evidence_excerpt"],
+                    "demand_signal": cluster["priority_score"],
+                    "demand_signal_method": "intent_and_repeat_evidence",
+                    "evidence_count": count,
+                    "sources": cluster["sources"],
+                    "evidence_urls": cluster["evidence_urls"],
+                    "repeated_need": cluster["repeated_need"],
+                    "novelty_score": None,
+                    "novelty_label": "unassessed",
+                    "build_difficulty": None,
+                    "market_difficulty": None,
+                    "hypothesis": True,
+                    "scoring_method": "evidence_brief",
+                    "validation_questions": [
+                        "Does this problem still exist, and how frequently does it happen?",
+                        "What does the current workaround cost in time or money?",
+                        "Do independent people report the same need?",
+                        "Would a service, physical product, process change, or software help?",
+                    ],
+                }
+            )
+            continue
+
         topic_ideas = topic_idea_templates.get(topic, [])
 
         if not topic_ideas:
@@ -106,6 +140,7 @@ def generate_ideas(clusters: List[Dict]) -> List[Dict]:
                     "cluster_id": cluster["id"],
                     "topic": topic,
                     "description": desc,
+                    "audiences": cluster.get("audiences", []),
                     "novelty_score": novelty,
                     "novelty_label": _get_novelty_label(novelty),
                     "build_difficulty": build_diff,
@@ -175,9 +210,16 @@ def _get_novelty_label(score: int) -> str:
 def format_ideas_for_agent(ideas: List[Dict]) -> str:
     output = ["# Product Ideas from Pain Points\n"]
 
+    for idea in ideas:
+        if idea.get("scoring_method") == "evidence_brief":
+            output.append(f"- **{idea['description']}**")
+            output.append(
+                f"  - Evidence: {idea['evidence_count']} posts; validation needed"
+            )
+
     output.append("## High Priority (Innovative + High Demand)\n")
     for idea in ideas:
-        if idea["novelty_score"] >= 4:
+        if (idea["novelty_score"] or 0) >= 4:
             output.append(f"- **{idea['description']}**")
             output.append(f"  - Topic: {idea['topic']}")
             output.append(
@@ -203,7 +245,11 @@ def format_ideas_for_agent(ideas: List[Dict]) -> str:
     output.append("## Quick Wins (Easy Build)\n")
     count = 0
     for idea in ideas:
-        if idea["build_difficulty"] <= 3 and count < 5:
+        if (
+            idea["build_difficulty"] is not None
+            and idea["build_difficulty"] <= 3
+            and count < 5
+        ):
             output.append(f"- **{idea['description']}**")
             output.append(
                 f"  - Build: {idea['build_difficulty']}/10 | Market: {idea['market_difficulty']}/10"

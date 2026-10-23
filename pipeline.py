@@ -33,7 +33,12 @@ def source_status(settings=None):
                 "evidence_role": "supporting" if name == "github" else "primary",
             }
         )
-    return {"status": "success", "sources": result}
+    return {
+        "status": "success",
+        "selected_audiences": settings.audiences,
+        "sources": result,
+        "stackexchange_searches": settings.stackexchange_searches(),
+    }
 
 
 def collect_posts(settings=None, store=None, limit=50, days=DEFAULT_WINDOW_DAYS):
@@ -57,6 +62,7 @@ def collect_posts(settings=None, store=None, limit=50, days=DEFAULT_WINDOW_DAYS)
         "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "selected_sources": list(settings.sources),
+        "selected_audiences": list(settings.audiences),
         "window_days": days,
         "collected": sum(row["collected"] for row in summaries),
         "comments_collected": sum(row["comments_collected"] for row in summaries),
@@ -79,7 +85,9 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
     leads = [
         p
         for p in points
-        if p["lead_quality"] == "opportunity" and p["evidence_role"] == "primary"
+        if p["lead_quality"] == "opportunity"
+        and p["evidence_role"] == "primary"
+        and p["primary_audience"] in settings.audiences
     ]
     supporting = [p for p in points if p["evidence_role"] == "supporting"]
     clusters = cluster_pain_points(leads, supporting)
@@ -90,6 +98,7 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
         "status": "success",
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "selected_sources": list(settings.sources),
+        "selected_audiences": list(settings.audiences),
         "window_days": days,
         "posts_processed": len(posts),
         "comments_processed": sum(post.get("kind") == "comment" for post in posts),
@@ -97,6 +106,7 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
         "leads_count": len(leads),
         "lead_source_counts": dict(Counter(p["source"] for p in leads)),
         "lead_age_counts": dict(Counter(p["freshness"] for p in leads)),
+        "lead_audience_counts": dict(Counter(p["primary_audience"] for p in leads)),
         "supporting_evidence_count": len(supporting),
         "source_counts": dict(Counter(p["source"] for p in posts)),
         "pain_points_count": len(points),
@@ -122,6 +132,7 @@ def run_pipeline(settings=None, store=None, limit=50, days=DEFAULT_WINDOW_DAYS):
             previous.get("schema_version") == 2
             and previous.get("analysis_version") == ANALYSIS_VERSION
             and set(previous.get("selected_sources", [])) == set(settings.sources)
+            and set(previous.get("selected_audiences", [])) == set(settings.audiences)
             and previous.get("window_days") == days
         )
         return {
@@ -129,6 +140,7 @@ def run_pipeline(settings=None, store=None, limit=50, days=DEFAULT_WINDOW_DAYS):
             "status": "error",
             "collection": collection,
             "selected_sources": list(settings.sources),
+            "selected_audiences": list(settings.audiences),
             "window_days": days,
             "analysis_reused": compatible,
             "message": "Collection failed; no new analysis was produced. Any saved analysis is unchanged.",

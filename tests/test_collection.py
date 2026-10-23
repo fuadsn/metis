@@ -45,14 +45,14 @@ def test_default_run_never_calls_deferred_sources_even_with_credentials(
         def __init__(self, config):
             pytest.fail("Default v1 collection must not call Reddit or X")
 
-    for source in ("hackernews", "github", "stackexchange"):
+    for source in ("hackernews", "github", "stackexchange", "discourse"):
         monkeypatch.setitem(COLLECTORS, source, free_collector(source))
     for source in ("reddit", "x"):
         monkeypatch.setitem(COLLECTORS, source, DeferredCollector)
     assert cli.main(["run", "--limit", "1"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "success"
-    assert called == ["hackernews", "github", "stackexchange"]
+    assert called == ["hackernews", "github", "stackexchange", "discourse"]
 
 
 def settings(**kwargs):
@@ -202,7 +202,7 @@ def test_hn_deduplicates_search_results_and_filters_deleted():
         result = COLLECTORS["hackernews"](settings(), client).collect(limit=20, days=30)
     assert result.status == "success"
     assert len(result.posts) == 1
-    assert len(result.posts[0]["matched_queries"]) == 5
+    assert len(result.posts[0]["matched_queries"]) == len(settings().hackernews_queries)
     assert result.posts[0]["body"] == "Looking for a tool"
 
 
@@ -482,10 +482,11 @@ def test_failed_collection_preserves_last_analysis_without_mixing_scope(
     store = Store(tmp_path)
     previous = {
         "schema_version": 2,
-        "analysis_version": 4,
+        "analysis_version": 5,
         "status": "success",
         "leads": [{"post_id": f"{(scope or ['github'])[0]}:1"}],
         "window_days": window,
+        "selected_audiences": ["small_business", "everyday_life"],
     }
     if scope is not None:
         previous["selected_sources"] = scope

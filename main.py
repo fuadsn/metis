@@ -24,7 +24,10 @@ def main(argv=None):
         result = run_safely(
             lambda: run_pipeline(
                 settings_for(
-                    args.sources, args.comment_threads, args.comments_per_thread
+                    args.sources,
+                    args.comment_threads,
+                    args.comments_per_thread,
+                    args.audiences,
                 ),
                 limit=args.limit,
                 days=args.days,

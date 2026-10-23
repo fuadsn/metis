@@ -1,3 +1,4 @@
+from .discourse import DiscourseCollector
 from .github import GitHubCollector
 from .hackernews import HNCollector
 from .reddit import RedditCollector
@@ -10,6 +11,7 @@ COLLECTORS = {
     "x": XCollector,
     "github": GitHubCollector,
     "stackexchange": StackExchangeCollector,
+    "discourse": DiscourseCollector,
 }
 __all__ = [
     "RedditCollector",
@@ -18,4 +20,5 @@ __all__ = [
     "XCollector",
     "StackExchangeCollector",
     "COLLECTORS",
+    "DiscourseCollector",
 ]
