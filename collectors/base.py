@@ -209,6 +209,7 @@ class Collector:
                     "Source redirected the request; collection stopped"
                 )
             if response.status_code >= 400:
+                self.check_source_error(response)
                 hints = {
                     401: "check credentials",
                     402: "API credits or billing access required",
@@ -228,3 +229,6 @@ class Collector:
                 return response.json()
             except ValueError:
                 raise CollectionError("Source returned invalid JSON")
+
+    def check_source_error(self, response):
+        """Allow adapters to recognize documented provider error codes safely."""

@@ -1,4 +1,4 @@
-"""Explain source selection and keep vendor feedback out of primary demand."""
+"""Explain source selection and its limits as evidence of demand."""
 
 SOURCE_CONTEXT = {
     "hackernews": {
@@ -20,10 +20,16 @@ SOURCE_CONTEXT = {
         "coverage_limit": "Cannot create a primary lead or contribute to repeat evidence.",
     },
     "discourse": {
-        "evidence_role": "supporting",
+        "evidence_role": "primary",
         "source_context": "vendor_community",
         "selection_reason": "The retained adapter reads only Shopify and Monzo product communities.",
-        "coverage_limit": "Disabled by default; product feedback cannot establish independent demand.",
+        "coverage_limit": "Disabled for collection by default; firsthand workflow problems can be candidates. Vendor feedback alone does not verify a broader market or willingness to pay.",
+    },
+    "youtube": {
+        "evidence_role": "primary",
+        "source_context": "video_comments",
+        "selection_reason": "Firsthand comments on focused business and everyday-life videos.",
+        "coverage_limit": "Optional API key required. Bounded top-level sample, biased by video selection; creator claims and popularity are not buyer demand.",
     },
 }
 

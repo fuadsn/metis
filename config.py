@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -27,8 +28,16 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 COLLECTION_INTERVAL_HOURS = 6
 DEFAULT_WINDOW_DAYS = 180
-ANALYSIS_VERSION = 6
-SOURCE_NAMES = ("hackernews", "reddit", "x", "github", "stackexchange", "discourse")
+ANALYSIS_VERSION = 7
+SOURCE_NAMES = (
+    "hackernews",
+    "reddit",
+    "x",
+    "github",
+    "stackexchange",
+    "discourse",
+    "youtube",
+)
 DEFAULT_SOURCES = ("hackernews", "github", "stackexchange")
 AUDIENCE_NAMES = ("small_business", "everyday_life", "developer_tools")
 DEFAULT_AUDIENCES = ("small_business", "everyday_life")
@@ -143,6 +152,18 @@ class Settings:
     stackexchange_key: str = field(
         default_factory=lambda: os.getenv("STACKEXCHANGE_KEY", ""), repr=False
     )
+    youtube_api_key: str = field(
+        default_factory=lambda: os.getenv("YOUTUBE_API_KEY", ""), repr=False
+    )
+    youtube_video_ids: List[str] = field(
+        default_factory=lambda: csv_env("METIS_YOUTUBE_VIDEO_IDS", "")
+    )
+    youtube_queries: Optional[List[str]] = field(
+        default_factory=lambda: queries_env("METIS_YOUTUBE_QUERIES", None)
+    )
+    youtube_comments_per_video: int = field(
+        default_factory=lambda: int(os.getenv("METIS_YOUTUBE_COMMENTS_PER_VIDEO", "25"))
+    )
     github_queries: Optional[List[str]] = field(
         default_factory=lambda: queries_env("METIS_GITHUB_QUERIES", None)
     )
@@ -200,6 +221,28 @@ class Settings:
         if not self.audiences or set(self.audiences) - set(AUDIENCE_NAMES):
             raise ValueError("audiences must contain: " + ", ".join(AUDIENCE_NAMES))
         self.audiences = list(dict.fromkeys(self.audiences))
+        youtube = {
+            "small_business": [
+                "small business bookkeeping problems",
+                "small business inventory management",
+            ],
+            "everyday_life": ["family budgeting problems", "childcare shift work"],
+            "developer_tools": [
+                "developer workflow problems",
+                "software deployment problems",
+            ],
+        }
+        if self.youtube_queries is None:
+            self.youtube_queries = [
+                youtube[a][i] for i in range(2) for a in self.audiences
+            ][:4]
+        if not 1 <= self.youtube_comments_per_video <= 100:
+            raise ValueError("youtube_comments_per_video must be 1–100")
+        if len(self.youtube_video_ids) > 8 or any(
+            not re.fullmatch(r"[A-Za-z0-9_-]{11}", video)
+            for video in self.youtube_video_ids
+        ):
+            raise ValueError("youtube_video_ids must contain at most 8 valid video IDs")
         github = {
             "small_business": [
                 '"appointments" "manual" in:title,body',
@@ -257,6 +300,7 @@ class Settings:
             "hackernews_queries",
             "x_queries",
             "stackexchange_queries",
+            "youtube_queries",
         ):
             values = getattr(self, name)
             if name == "stackexchange_queries" and values is None:

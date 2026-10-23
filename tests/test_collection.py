@@ -7,7 +7,7 @@ import pytest
 
 from collectors import COLLECTORS
 from collectors.base import CollectionResult
-from config import Settings
+from config import ANALYSIS_VERSION, Settings
 from models import normalize_post
 from pipeline import collect_posts, run_analysis
 from processors import clean_posts, cluster_pain_points, extract_pain_points
@@ -482,7 +482,7 @@ def test_failed_collection_preserves_last_analysis_without_mixing_scope(
     store = Store(tmp_path)
     previous = {
         "schema_version": 2,
-        "analysis_version": 6,
+        "analysis_version": ANALYSIS_VERSION,
         "status": "success",
         "leads": [{"post_id": f"{(scope or ['github'])[0]}:1"}],
         "window_days": window,

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 — Broader source pilot
+
+- Add optional YouTube Data API comment collection with bounded discovery, curated-video support, original comment dates, and explicit quota/access failures. YouTube is disabled by default and needs an API key; no paid source is enabled.
+- Add offline `research-import` and `research` commands for UK Business Forums, MoneySavingExpert, and Capterra. Notes preserve provenance, date uncertainty, review incentives, counterevidence, and validation questions. They never enter automated lead scores or recurrence counts.
+- Restore Shopify/Monzo workflow reports as eligible primary candidates while retaining source bias labels and the existing collection access checks. GitHub remains supporting evidence.
+- Separate problem signals from stated willingness to pay. Upgrade analysis to version 7; reanalyze saved posts to apply the new rules.
+- Document source access checks and the initial manual pilot in `docs/source-pilot.md`.
+
 ## 0.6.0 — Independent demand and source accountability
 
 - Disable Shopify/Monzo collection by default and classify their existing evidence as supporting only, matching the GitHub rule. Vendor feedback cannot create a lead or inflate recurrence and priority.

@@ -39,6 +39,10 @@ class Store:
                     post_id TEXT PRIMARY KEY, label TEXT NOT NULL, note TEXT NOT NULL,
                     reviewed_at TEXT NOT NULL, fingerprint TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS research_notes (
+                    id TEXT PRIMARY KEY, source TEXT NOT NULL,
+                    published_on TEXT, payload TEXT NOT NULL
+                );
             """)
             if not db.execute(
                 "SELECT 1 FROM metadata WHERE key='legacy_import_complete'"

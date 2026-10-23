@@ -53,6 +53,8 @@ def main():
         assert run("leads")["leads"] == []
         assert run("candidates")["candidates"] == []
         assert run("evaluate")["evaluated"] == 0
+        assert run("research")["research_notes"] == []
+        assert len(sources["research_sources"]) == 3
     print("Installed wheel: configuration, analysis, storage, and CLI checks passed.")
 
 

@@ -1,4 +1,4 @@
-"""Vendor feedback must not manufacture independent market demand."""
+"""Source context qualifies candidate evidence without assuming verified demand."""
 
 from datetime import datetime, timezone
 
@@ -29,7 +29,7 @@ def post(source="hackernews", community="hackernews", **overrides):
 
 
 @pytest.mark.parametrize("host", ["community.shopify.com", "community.monzo.com"])
-def test_vendor_community_can_never_create_primary_leads_even_with_buying(
+def test_vendor_workflow_can_be_a_candidate_without_claiming_verified_demand(
     host, tmp_path
 ):
     store = Store(tmp_path)
@@ -43,12 +43,15 @@ def test_vendor_community_can_never_create_primary_leads_even_with_buying(
         ]
     )
     result = run_analysis(Settings(sources=["discourse"]), store)
-    assert result["leads"] == result["clusters"] == result["ideas"] == []
-    assert result["supporting_evidence_count"] == 1
-    assert result["supporting_evidence"][0]["source_context"] == "vendor_community"
+    assert len(result["leads"]) == 1
+    lead = result["leads"][0]
+    assert lead["source_context"] == "vendor_community"
+    assert lead["current_need_verified"] is False
+    assert lead["willingness_to_pay"] == "stated_in_text_unverified"
+    assert result["clusters"][0]["repeated_need"] is False
 
 
-def test_vendor_support_does_not_inflate_recurrence_or_cross_community_claims(tmp_path):
+def test_vendor_and_independent_report_can_form_an_unverified_theme(tmp_path):
     store = Store(tmp_path)
     primary = post()
     store.upsert(
@@ -64,13 +67,13 @@ def test_vendor_support_does_not_inflate_recurrence_or_cross_community_claims(tm
     )
     result = run_analysis(Settings(sources=["hackernews", "discourse"]), store)
     cluster = result["clusters"][0]
-    assert len(result["leads"]) == 1
-    assert len(cluster["supporting_evidence"]) == 1
+    assert len(result["leads"]) == 2
+    assert len(cluster["supporting_evidence"]) == 0
     assert (
-        cluster["repeat_evidence_count"] == cluster["independent_community_count"] == 1
+        cluster["repeat_evidence_count"] == cluster["independent_community_count"] == 2
     )
-    assert cluster["corroboration"] == "not_established"
-    assert cluster["priority_score"] == score_post(primary)["priority_score"]
+    assert cluster["corroboration"] == "cross_community_theme"
+    assert "related_theme_only" in cluster["repeat_validation"]
 
 
 def test_two_topic_communities_are_visible_but_do_not_claim_verified_demand(tmp_path):
@@ -163,7 +166,7 @@ def test_source_status_explains_choices_and_new_default_excludes_vendor_forums(
     result = source_status(settings)
     sources = {row["source"]: row for row in result["sources"]}
     assert sources["discourse"]["status"] == "disabled"
-    assert sources["discourse"]["evidence_role"] == "supporting"
+    assert sources["discourse"]["evidence_role"] == "primary"
     assert sources["stackexchange"]["evidence_role"] == "primary"
     assert all(
         row["selection_reason"] and row["coverage_limit"] for row in sources.values()
@@ -182,8 +185,8 @@ def test_coverage_reports_empty_selected_communities_and_support_separately(tmp_
     coverage = {(r["source"], r["community"]): r for r in result["community_coverage"]}
     assert coverage[("stackexchange", "money")]["analyzed_records"] == 0
     assert coverage[("hackernews", "hackernews")]["primary_candidates"] == 1
-    assert coverage[("discourse", "community.shopify.com")]["supporting_records"] == 1
-    assert coverage[("discourse", "community.shopify.com")]["primary_candidates"] == 0
+    assert coverage[("discourse", "community.shopify.com")]["supporting_records"] == 0
+    assert coverage[("discourse", "community.shopify.com")]["primary_candidates"] == 1
 
 
 @pytest.mark.parametrize(

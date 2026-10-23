@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import schedule
 
+from config import ANALYSIS_VERSION
 from storage import Store
 
 
@@ -69,7 +70,7 @@ def test_latest_exposes_newer_failed_collection_without_relabeling_saved_analysi
     store.save_result(
         {
             "schema_version": 2,
-            "analysis_version": 6,
+            "analysis_version": ANALYSIS_VERSION,
             "status": "success",
             "processed_at": "2026-10-20T00:00:00+00:00",
             "selected_sources": ["github"],

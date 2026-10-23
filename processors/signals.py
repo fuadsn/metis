@@ -414,6 +414,12 @@ def score_post(post, now=None):
         if age <= 30
         else "historical",
         "current_need_verified": False,
+        "validation_stage": "unvalidated_problem_signal"
+        if quality == "opportunity"
+        else "insufficient_signal",
+        "willingness_to_pay": "stated_in_text_unverified"
+        if buying
+        else "not_established",
         "firsthand_context": firsthand,
         "recurring_work_mentioned": recurring,
         "lead_type": "noise"

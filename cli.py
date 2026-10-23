@@ -15,6 +15,7 @@ from models import REVIEW_LABELS, timestamp
 from pipeline import collect_posts, run_analysis, run_pipeline, source_status
 from processors.evaluation import evaluate_reviews
 from storage import Store
+from storage.research import RESEARCH_SOURCES, import_research, list_research
 
 
 def configure_logging():
@@ -183,6 +184,16 @@ def main(argv=None):
     subparsers.add_parser(
         "evaluate", help="Compare ranking rules with your local review labels"
     )
+    research_import = subparsers.add_parser(
+        "research-import",
+        help="Import linked analyst notes without scoring them as posts",
+    )
+    research_import.add_argument("path")
+    research = subparsers.add_parser(
+        "research", help="Read the manual source pilot notes"
+    )
+    research.add_argument("--source", choices=tuple(RESEARCH_SOURCES))
+    research.add_argument("--limit", type=bounded_int(1, 1000), default=20)
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
@@ -190,6 +201,10 @@ def main(argv=None):
     configure_logging()
 
     def execute():
+        if args.command == "research-import":
+            return import_research(args.path, Store())
+        if args.command == "research":
+            return list_research(Store(), args.source, args.limit)
         if args.command in {
             "leads",
             "ideas",

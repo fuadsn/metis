@@ -4,6 +4,7 @@ from .hackernews import HNCollector
 from .reddit import RedditCollector
 from .stackexchange import StackExchangeCollector
 from .x import XCollector
+from .youtube import YouTubeCollector
 
 COLLECTORS = {
     "hackernews": HNCollector,
@@ -12,6 +13,7 @@ COLLECTORS = {
     "github": GitHubCollector,
     "stackexchange": StackExchangeCollector,
     "discourse": DiscourseCollector,
+    "youtube": YouTubeCollector,
 }
 __all__ = [
     "RedditCollector",
@@ -21,4 +23,5 @@ __all__ = [
     "StackExchangeCollector",
     "COLLECTORS",
     "DiscourseCollector",
+    "YouTubeCollector",
 ]

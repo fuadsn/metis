@@ -11,6 +11,7 @@ from processors import clean_posts, cluster_pain_points
 from processors.cleaner import rank_candidates
 from processors.source_context import community_coverage, source_context
 from storage import Store
+from storage.research import research_sources
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ def source_status(settings=None):
         "selected_audiences": settings.audiences,
         "sources": result,
         "stackexchange_searches": settings.stackexchange_searches(),
+        "research_sources": research_sources(),
     }
 
 
