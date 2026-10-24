@@ -131,6 +131,7 @@ def latest(kind, limit=20, source=None, store=None, quality=None, audience=None)
         "lead_age_counts": data.get("lead_age_counts", {}),
         "supporting_evidence_count": data.get("supporting_evidence_count", 0),
         "community_coverage": data.get("community_coverage", []),
+        "commercial_filter": data.get("commercial_filter", {}),
         "latest_collection": collection,
         "collection_newer_than_analysis": bool(
             collection
@@ -168,7 +169,14 @@ def main(argv=None):
     )
     status_parser.add_argument("--sources")
     status_parser.add_argument("--audiences")
-    for name in ("leads", "ideas", "clusters", "candidates", "supporting_evidence"):
+    for name in (
+        "leads",
+        "ideas",
+        "problems",
+        "clusters",
+        "candidates",
+        "supporting_evidence",
+    ):
         command = subparsers.add_parser(name)
         command.add_argument("--limit", type=bounded_int(1, 1000), default=20)
         command.add_argument("--source", choices=SOURCE_NAMES)
@@ -207,6 +215,7 @@ def main(argv=None):
             return list_research(Store(), args.source, args.limit)
         if args.command in {
             "leads",
+            "problems",
             "ideas",
             "clusters",
             "candidates",

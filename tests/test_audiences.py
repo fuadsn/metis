@@ -83,22 +83,35 @@ def test_audience_selection_changes_leads_and_keeps_all_candidates(tmp_path):
         [
             post("I manually count inventory in our shop every week."),
             post("Our team manually repeats deployment steps every week.", id="2"),
+            post(
+                "Our shop reconciles physical inventory counts manually each Friday.",
+                id="3",
+                author="merchant",
+            ),
+            post(
+                "Our team performs repetitive CI/CD work on every release.",
+                id="4",
+                author="engineer",
+            ),
         ]
     )
     business = run_analysis(
         Settings(audiences=["small_business"], sources=["hackernews"]), store
     )
-    assert len(business["leads"]) == 1
+    assert len(business["leads"]) == 2
     assert business["leads"][0]["post_id"] == "hackernews:1"
-    assert len(business["candidates"]) == 2
-    assert business["lead_audience_counts"] == {"small_business": 1}
+    assert len(business["candidates"]) == 4
+    assert business["lead_audience_counts"] == {"small_business": 2}
     assert business["ideas"][0]["scoring_method"] == "evidence_brief"
     assert business["ideas"][0]["novelty_score"] is None
     assert business["ideas"][0]["problem_excerpt"] in business["leads"][0]["body"]
     technical = run_analysis(
         Settings(audiences=["developer_tools"], sources=["hackernews"]), store
     )
-    assert [p["post_id"] for p in technical["leads"]] == ["hackernews:2"]
+    assert {p["post_id"] for p in technical["leads"]} == {
+        "hackernews:2",
+        "hackernews:4",
+    }
     from cli import latest
 
     assert latest("ideas", store=store, audience="developer_tools")["ideas"]

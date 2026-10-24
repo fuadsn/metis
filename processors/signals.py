@@ -7,7 +7,7 @@ from config import PAIN_KEYWORDS
 from processors.audiences import AUDIENCE_TERMS, classify_audiences, primary_audience
 from processors.source_context import source_context
 
-BUYING = ("would pay", "will pay", "willing to pay", "budget for")
+BUYING = ("would pay", "will pay", "could pay", "willing to pay", "budget for")
 SEARCH = (
     "looking for",
     "alternative to",
@@ -145,6 +145,49 @@ def own_statement(phrase, sentence):
     )
 
 
+def purchase_sentences(text):
+    """Payment interest must concern a solution, not an unrelated life budget."""
+    target = (
+        PRODUCT
+        + r"|\b(?:workaround|subscription|bookkeeping|childcare|caregiving|cleaning|gardening|newsletter|news bundle)\b"
+    )
+    result = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", signal_text(text)):
+        normalized = matching_text(sentence)
+        for phrase in BUYING:
+            if not affirmed(phrase, sentence) or not own_statement(phrase, sentence):
+                continue
+            tail = normalized[normalized.find(phrase) + len(phrase) :]
+            if re.search(
+                r"^\s+(?:for\s+)?(?:(?:nothing|zero|less)\b|[$£€]?\s*0(?:\.0+)?(?:\s|/|$))",
+                tail,
+            ):
+                continue
+            if re.search(target, tail[:160]):
+                result.append(sentence.strip())
+                break
+    return result
+
+
+def workflow_state(text):
+    """Keep solved workflows as useful research, not unresolved demand."""
+    text = matching_text(signal_text(text))
+    resolved = re.search(
+        r"\b(?:solved (?:my|our|the|a lot of)|fixed (?:it|this|the (?:issue|problem))|"
+        r"(?:it|this|that) (?:has |have )?(?:solved|fixed)|"
+        r"(?:exactly|everything) (?:what )?i (?:wanted|need)|"
+        r"works (?:perfectly|well) for (?:me|us)|"
+        r"(?:my|our) problem (?:is|was|has been) (?:solved|fixed))\b",
+        text,
+    )
+    residual = re.search(
+        r"\b(?:still|but|however)\b[^.!?\n]{0,80}\b(?:have to|has to|cannot|can't|"
+        r"waste|wastes|spend|spends|manually|fails|broken|unresolved|struggling)\b",
+        text,
+    )
+    return "resolved" if resolved and not residual else "ongoing_or_unknown"
+
+
 def score_post(post, now=None):
     text = signal_text(
         post.get("text") or "\n".join((post.get("title", ""), post.get("body", "")))
@@ -152,18 +195,11 @@ def score_post(post, now=None):
     keywords = [phrase for phrase in PAIN_KEYWORDS if affirmed(phrase, text)]
     sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
     paragraphs = re.split(r"\n\s*\n", text)
+    payment_sentences = purchase_sentences(text)
     buying = [
         phrase
         for phrase in BUYING
-        if any(
-            affirmed(phrase, sentence)
-            and own_statement(phrase, sentence)
-            and not re.search(
-                re.escape(phrase) + r"\s+(?:for\s+)?(?:nothing|zero)\b",
-                matching_text(sentence),
-            )
-            for sentence in sentences
-        )
+        if any(matches(phrase, s) for s in payment_sentences)
     ]
     search = [phrase for phrase in SEARCH if affirmed(phrase, text)]
     normalized = matching_text(text)
@@ -260,12 +296,18 @@ def score_post(post, now=None):
     )
     if time_cost and not affirmed(time_cost.group(), text):
         time_cost = None
+    if time_cost and not re.search(
+        r"\b(?:coordinat\w*|reconcil\w*|count\w*|enter\w*|review\w*|chasing|"
+        r"deploy\w*|copy\w*|clean\w*|import\w*|schedul\w*|wast\w*|struggl\w*)\b",
+        normalized,
+    ):
+        time_cost = None
     if time_cost:
         burden.append(time_cost.group())
     firsthand = bool(re.search(PERSON, normalized))
     recurring = bool(
         re.search(
-            r"\b(?:every|each|per|a) (?:day|week|weekday|month|release|deployment|monday|tuesday|wednesday|thursday|friday|saturday|sunday|sku|order|item|customer|time)\b|\b(?:daily|weekly|monthly|repeatedly|repetitive)\b",
+            r"\b(?:every|each|per|a) (?:day|week|weekday|month|quarter|release|deployment|monday|tuesday|wednesday|thursday|friday|saturday|sunday|sku|order|item|customer|time)\b|\b(?:daily|weekly|monthly|quarterly|repeatedly|repetitive)\b",
             normalized,
         )
     )
@@ -388,6 +430,10 @@ def score_post(post, now=None):
         score, quality = 0, "noise"
     if not candidate:
         score = 0
+    state = workflow_state(text)
+    if state == "resolved" and quality == "opportunity":
+        components["resolved_workflow_penalty"] = -max(0, score - 25)
+        score, quality = min(score, 25), "support"
     phrases = list(
         dict.fromkeys(buying + search + unmet + burden + keywords + questions)
     )
@@ -414,6 +460,7 @@ def score_post(post, now=None):
         if age <= 30
         else "historical",
         "current_need_verified": False,
+        "workflow_state": state,
         "validation_stage": "unvalidated_problem_signal"
         if quality == "opportunity"
         else "insufficient_signal",
@@ -439,7 +486,7 @@ def score_post(post, now=None):
             dict.fromkeys(keywords + buying + search + unmet + burden)
         ),
         "evidence_excerpt": excerpt[:600],
-        "scoring_method": "intent_heuristic_v5",
+        "scoring_method": "intent_heuristic_v6",
     }
 
 

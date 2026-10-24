@@ -85,15 +85,16 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
     cleaned = clean_posts(posts)
     candidates = rank_candidates(cleaned)
     points = [p for p in candidates if p["lead_quality"] != "noise"]
-    leads = [
+    problems = [
         p
         for p in points
         if p["lead_quality"] == "opportunity"
         and p["evidence_role"] == "primary"
         and p["primary_audience"] in settings.audiences
     ]
+    leads = [p for p in problems if p["commercial"]["eligible"]]
     supporting = [p for p in points if p["evidence_role"] == "supporting"]
-    clusters = cluster_pain_points(leads, supporting)
+    clusters = cluster_pain_points(problems, supporting)
     ideas = generate_ideas(clusters)
     result = {
         "schema_version": 2,
@@ -107,6 +108,18 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
         "comments_processed": sum(post.get("kind") == "comment" for post in posts),
         "quality_counts": dict(Counter(p["lead_quality"] for p in candidates)),
         "leads_count": len(leads),
+        "problems_count": len(problems),
+        "commercial_filter": {
+            "enabled": True,
+            "minimum_independent_reports_for_idea": 2,
+            "economic_requirement": "one stated economic signal or two inferred recurring business labor reports",
+            "cross_platform_required": False,
+            "excluded_problem_count": len(problems) - len(leads),
+            "excluded_idea_groups": sum(
+                not c["commercial"]["eligible"] for c in clusters
+            ),
+            "payment_verified": False,
+        },
         "lead_source_counts": dict(Counter(p["source"] for p in leads)),
         "lead_age_counts": dict(Counter(p["freshness"] for p in leads)),
         "lead_audience_counts": dict(Counter(p["primary_audience"] for p in leads)),
@@ -118,6 +131,7 @@ def run_analysis(settings=None, store=None, days=DEFAULT_WINDOW_DAYS):
         "ideas_count": len(ideas),
         "pain_points": points,
         "leads": leads,
+        "problems": problems,
         "supporting_evidence": supporting,
         "candidates": candidates,
         "clusters": clusters,

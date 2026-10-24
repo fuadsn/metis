@@ -107,12 +107,14 @@ def test_synonyms_group_related_needs_across_sources_but_keep_different_needs_se
         ),
         post(
             "Our CI/CD requires repetitive manual work for releases.",
+            source="stackexchange",
             title="CI/CD workflow",
             id="2",
             author="dev",
         ),
         post(
             "Our deployment software is too expensive. Looking for an alternative to this tool.",
+            source="hackernews",
             title="Deployment pricing",
             id="3",
             author="another",
@@ -121,7 +123,7 @@ def test_synonyms_group_related_needs_across_sources_but_keep_different_needs_se
     groups = cluster_pain_points(rank_candidates(clean_posts(records)))
     automation = next(g for g in groups if g["need"] == "automation")
     assert automation["topic"] == "deploy"
-    assert automation["sources"] == ["github", "hackernews"]
+    assert automation["sources"] == ["hackernews", "stackexchange"]
     assert automation["repeated_need"] is True
     assert automation["repeat_evidence_count"] == 2
     assert len(groups) == 2
@@ -131,9 +133,14 @@ def test_synonyms_group_related_needs_across_sources_but_keep_different_needs_se
     "case", ["same_thread", "same_author", "copied_text", "unknown_authors"]
 )
 def test_replies_reposts_and_unknown_authors_do_not_inflate_repeat_evidence(case):
-    first = post("I manually repeat deployment steps every week.", id="1")
+    first = post(
+        "I manually repeat deployment steps every week.", id="1", source="hackernews"
+    )
     second = post(
-        "We need a tool to automate CI/CD manual work.", id="2", author="someone-else"
+        "We need a tool to automate CI/CD manual work.",
+        id="2",
+        author="someone-else",
+        source="hackernews",
     )
     if case == "same_thread":
         second.update(kind="comment", parent_id=first["id"])

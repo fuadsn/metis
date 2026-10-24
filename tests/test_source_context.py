@@ -72,8 +72,8 @@ def test_vendor_and_independent_report_can_form_an_unverified_theme(tmp_path):
     assert (
         cluster["repeat_evidence_count"] == cluster["independent_community_count"] == 2
     )
-    assert cluster["corroboration"] == "cross_community_theme"
-    assert "related_theme_only" in cluster["repeat_validation"]
+    assert cluster["corroboration"] == "cross_platform_problem"
+    assert "same_task_obstacle_and_audience_rules" in cluster["repeat_validation"]
 
 
 def test_two_topic_communities_are_visible_but_do_not_claim_verified_demand(tmp_path):
@@ -93,9 +93,9 @@ def test_two_topic_communities_are_visible_but_do_not_claim_verified_demand(tmp_
     result = run_analysis(Settings(sources=["stackexchange"]), store)
     cluster = result["clusters"][0]
     assert cluster["repeated_need"] is True
-    assert cluster["corroboration"] == "cross_community_theme"
+    assert cluster["corroboration"] == "cross_community_problem"
     assert cluster["independent_community_count"] == 2
-    assert "related_theme_only" in cluster["repeat_validation"]
+    assert "same_task_obstacle_and_audience_rules" in cluster["repeat_validation"]
     assert all(not lead["current_need_verified"] for lead in result["leads"])
 
 

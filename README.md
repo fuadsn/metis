@@ -2,7 +2,7 @@
 
 [![Checks](https://github.com/fuadsn/metis/actions/workflows/checks.yml/badge.svg)](https://github.com/fuadsn/metis/actions/workflows/checks.yml)
 
-Find unmet needs faced by small businesses and everyday people in public discussions. Metis searches community discussions for firsthand problems, recurring work, and requests for solutions. It exports candidates with dates, excerpts, and links, and keeps GitHub issues as supporting research.
+Find unmet needs faced by small businesses and everyday people in public discussions. Metis searches community discussions for firsthand problems, recurring work, and requests for solutions. It groups specific tasks and obstacles, screens for economic evidence, and exports recurring opportunity hypotheses with dates, excerpts, and links. GitHub issues remain supporting research.
 
 V1 uses **Hacker News, topic communities on Stack Exchange, and supporting GitHub Issues** with no API fees or required credentials. Reddit, X, and the product-specific Shopify/Monzo forum adapter are retained but disabled by default.
 
@@ -68,6 +68,8 @@ metis run --limit 50
 metis collect --sources github --limit 20
 metis analyze --days 180
 metis leads --limit 20
+# Preliminary problem candidates, including those excluded by the commercial filter:
+metis problems --limit 20
 metis leads --audience everyday_life --limit 10
 metis run --audiences developer_tools --sources hackernews,github,stackexchange --limit 30
 metis supporting_evidence --source github --limit 10
@@ -130,15 +132,25 @@ CLI stdout is JSON; progress logs go to stderr. Exit codes: `0` success, `2` par
 
 A completely failed collection preserves the last analysis on disk. The failed run includes cached analysis only when its analysis version, `selected_sources`, `selected_audiences`, and `window_days` match the request, with `analysis_reused: true`. Retrieval commands return the saved analysis scope, timestamp, and `latest_collection`; `collection_newer_than_analysis` flags a subsequent collection attempt. Check these fields before treating saved leads as current. Watch mode reports temporary storage errors as JSON and tries again at the next scheduled interval. After upgrading, run `metis analyze` to refresh older saved output with the current rules.
 
-Each lead includes `source`, `community`, source-qualified `post_id`, full body, discussion URL, author, creation time, matched phrases, evidence excerpt, lead type, `lead_quality`, and a heuristic priority score with `score_breakdown`. `leads` contains primary community opportunity candidates. Every GitHub issue/comment has `evidence_role: supporting` and appears in `supporting_evidence` when it has a non-noise signal; it cannot create an opportunity or increase repeat/priority counts. `source_context` and `coverage_limit` explain source bias. `validation_stage` describes the strength of the problem signal; `willingness_to_pay` distinguishes an unverified statement in the text from no established payment signal. Neither verifies a buyer. `candidates` exposes all quality classes and both evidence roles for review. Popularity alone does not qualify a post. Scores are not purchase probabilities.
+Each lead includes `source`, `community`, source-qualified `post_id`, full body, discussion URL, author, creation time, matched phrases, evidence excerpt, lead type, `lead_quality`, and a heuristic priority score with `score_breakdown`. `leads` contains primary community opportunity candidates that pass the commercial filter. `problems` preserves all preliminary in-scope problem candidates before that filter; these can still include advice or weak signals. Every candidate carries `commercial.eligible`, evidence excerpts, and exclusion reasons. Every GitHub issue/comment has `evidence_role: supporting` and appears in `supporting_evidence` when it has a non-noise signal; it cannot create an opportunity or increase repeat/priority counts. `source_context` and `coverage_limit` explain source bias. `validation_stage` describes the strength of the problem signal; `willingness_to_pay` distinguishes an unverified statement in the text from no established payment signal. Neither verifies a buyer. `candidates` exposes all quality classes and both evidence roles for review. Popularity alone does not qualify a post. Scores are not purchase probabilities.
 
-`community_coverage` in analysis and retrieval output reports analyzed records, primary candidates, supporting records, and noise per community, including empty selected Stack Exchange communities. These are observed yields, not measured precision. Clusters expose `independent_community_count` and `corroboration`: `not_established`, `same_community_theme`, or `cross_community_theme`. Supporting product evidence never changes these counts. Even cross-community themes require review to confirm the same unresolved problem and willingness to pay.
+`community_coverage` in analysis and retrieval output reports analyzed records, primary candidates, supporting records, and noise per community, including empty selected Stack Exchange communities. These are observed yields, not measured precision. Clusters expose `independent_community_count`, `independent_platform_count` (collector sources), and `corroboration`: `not_established`, `same_community_problem`, `cross_community_problem`, or `cross_platform_problem`. Counts use the selected independent reports, not every source present in a group. Supporting product evidence never changes these counts. These are rule-based matches requiring review, not verified identities or demand.
 
 The rules favor explicit willingness to pay, searches for products, unmet capabilities, and recurring or costly work in the selected business, household, or developer contexts. They discount ordinary support, common negations, promotions, hiring, bots, code samples, and blockquotes. Recency adds no score. `age_days`, `freshness` (recent/historical/unknown), and `current_need_verified: false` keep age separate from intent. Historical requests need a fresh check before outreach; publication age alone does not show that a problem persists. Headlines that merely describe alternatives, recruiting, surveys, and tutorial instructions are discounted. These are English rules and can miss intent or mistake implementation tasks for market demand.
 
-Groups combine subject synonyms (such as deployment/CI/CD and authentication/SSO) with need categories such as automation, cost, or reliability. They expose evidence links, thread counts, and source-qualified author-account counts. A repeated-need flag requires at least two distinct threads, accounts, and texts; a conservative selection avoids boosting repeated replies, reposts by one author, or exact copies. Accounts across platforms are not verified as distinct people. Unknown topics do not receive a repeated-need boost. Clusters report `evidence_span_days` and age counts. The repeated-need flag means independent accounts describe a related theme; `repeat_validation` makes clear that confirming the exact same unresolved need still requires reading the evidence. GitHub matches attach by topic and need with an explicit unverified-match label. This is rule-based grouping, not semantic clustering.
+Grouping requires the **same task, obstacle, and primary audience**, rather than a shared topic such as “budget” or “automation.” For example, bank CSV import problems stay separate from monthly budget adjustments, and entering invoices stays separate from chasing overdue invoices. Each group includes `problem_signature`, an obstacle excerpt, and `match_explanation`. Broad topic/need labels are for display only. Unknown tasks, ambiguous posts describing multiple tasks, and posts without a clear obstacle stay separate. Parent titles never supply a comment's task or obstacle.
 
-Business and everyday-life ideas are evidence-led research briefs (`scoring_method: evidence_brief`) with the original problem excerpt, links, and validation questions. They do not assume the answer is an app, and leave novelty/build/market estimates unassessed. Developer-only suggestions retain legacy fixed-template hypotheses. All suggestions have `hypothesis: true`; demand ordering follows intent and repeat evidence, not platform upvotes.
+The current English task vocabulary covers transaction imports, budget maintenance, physical inventory counts, inventory synchronization, invoice entry/reconciliation/collection, appointments, childcare shift coverage, school payments, meal plans, spreadsheet tax filing, and software releases/rollbacks. This deliberately bounded vocabulary can miss valid matches and opportunities; it is not semantic understanding. Add task rules with positive paraphrases and nearby negative cases when reviewing missed opportunities.
+
+A recurring group needs **at least two distinct accounts, threads, and nonduplicate texts**. Exact and long near-duplicate copies are collapsed before ranking; later copies cannot add a platform or economic evidence. Unknown authors do not establish independence. `independent_evidence_ids` and `excluded_from_repeat` explain the count. Accounts on different platforms are not verified as different people. `evidence_span_days` uses independent reports; age alone does not establish recurrence. Matching GitHub evidence attaches by task/obstacle/audience and never contributes to commercial eligibility, repeat counts, or ranking.
+
+The commercial filter is on by default:
+
+- **Individual lead:** an unresolved primary problem plus stated interest in paying for a solution, spending on an existing solution, quantified recurring time cost, or inferred recurring business labor. An unrelated car budget, a satisfied workaround, a free-only request, and ordinary advice do not establish commercial demand. Economic excerpts retain their `stated` or `inferred` basis.
+- **Idea:** at least two independent matching problem reports, with either one stated economic signal or recurring business labor reported by at least two independent accounts. A single buyer request stays a lead until corroborated. Repetition alone without economic evidence stays research.
+- **Priority:** qualified ideas come first, then independent cross-platform corroboration, recurrence, and intent. Multiple platforms strengthen the case but are not mandatory. Recency and popularity add no points.
+
+All ideas are evidence briefs (`scoring_method: evidence_brief`) describing the task, obstacle, desired outcome, linked economic evidence, and validation questions. Generic developer templates and invented novelty/build/market scores have been removed. `hypothesis: true` and `payment_verified: false` remain explicit: a statement about paying is not a verified purchase, and labor savings are not proof of willingness to pay. Zero ideas is a valid result when the sample does not meet the filter. `commercial_filter` in analysis/retrieval output explains the requirements and excluded counts.
 
 ## Review lead quality
 
@@ -153,7 +165,7 @@ metis review hackernews:789 --label noise
 metis evaluate
 ```
 
-Labels are `opportunity`, `support`, or `noise`. Reviews stay in SQLite and do not post anything to the source platform or automatically retrain the rules. Evaluation reports a confusion matrix and opportunity precision/recall on your labelled sample only. Metrics are null when their denominator is zero. Reviews of edited evidence are marked stale and excluded until reviewed again. The test suite's illustrative examples are regression checks, not an independent accuracy benchmark.
+Labels are `opportunity`, `support`, or `noise`. Reviews stay in SQLite and do not post anything to the source platform or automatically retrain the rules. Evaluation reports a confusion matrix and opportunity precision/recall for the underlying intent classifier on your labelled sample only; it does not measure grouping accuracy, commercial-filter precision, or market viability. Metrics are null when their denominator is zero. Reviews of edited evidence are marked stale and excluded until reviewed again. The test suite's illustrative examples are regression checks, not an independent accuracy benchmark.
 
 ## Deferred sources
 
@@ -178,7 +190,7 @@ python -m pip install -e '.[dev]'
 python -m ruff check .
 python -m pytest -q
 python -m build
-python scripts/check_wheel.py dist/metis-0.7.0-py3-none-any.whl
+python scripts/check_wheel.py dist/metis-0.8.0-py3-none-any.whl
 ```
 
 GitHub Actions runs these checks on Python 3.9 and 3.14 for pushes and pull requests. Tests use mocked HTTP responses and temporary databases; they do not consume API credits. The wheel check installs dependencies from PyPI, then verifies configuration, local analysis, and storage outside the checkout without contacting source platforms. It does not schedule collection.

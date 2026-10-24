@@ -89,7 +89,10 @@ def test_primary_evidence_across_periods_keeps_dates_and_independent_counts(tmp_
     assert result["lead_age_counts"] == {"historical": 1, "recent": 1}
     assert result["clusters"][0]["repeated_need"] is True
     assert result["clusters"][0]["evidence_span_days"] == 115
-    assert "related_theme_only" in result["clusters"][0]["repeat_validation"]
+    assert (
+        "same_task_obstacle_and_audience_rules"
+        in result["clusters"][0]["repeat_validation"]
+    )
 
 
 def test_hn_searches_both_periods_and_nested_comment_text_with_original_attribution():

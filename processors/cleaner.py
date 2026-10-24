@@ -1,6 +1,8 @@
 from typing import Dict, List
 
 from models import unique_posts
+from processors.commercial import commercial_assessment
+from processors.problems import problem_signature
 from processors.signals import matches, score_post
 
 
@@ -33,6 +35,9 @@ def rank_candidates(posts: List[Dict]) -> List[Dict]:
         }
         for post in posts
     ]
+    for point in points:
+        point["problem_signature"] = problem_signature(point)
+        point["commercial"] = commercial_assessment(point)
     return sorted(
         points, key=lambda point: (-point["priority_score"], point["post_id"])
     )

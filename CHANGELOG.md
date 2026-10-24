@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 — Specific problem groups and commercial screening
+
+- Group by task, obstacle, and primary audience; shared “budget” or “automation” topics no longer establish a match. Unknown and ambiguous tasks remain separate, with inspectable signatures and match explanations.
+- Require independent accounts, conversations, and nonduplicate evidence for recurrence. Collapse long near-copies before ranking and compute platform diversity only from independent reports. GitHub remains supporting only.
+- Filter leads for stated payment interest, existing solution spend, quantified recurring time cost, or inferred recurring business labor. Preserve excluded candidates and reasons through the new `metis problems` view and existing `candidates` view.
+- Require two matching independent reports and an economic basis before generating an idea. Prefer cross-platform corroboration; keep single promising reports as leads. Label labor cost as inferred and all payment interest as unverified.
+- Replace generic developer idea templates with evidence briefs for every audience. Remove unsupported novelty, build, and market estimates.
+- Discount satisfied/resolved workflows and unrelated life budgets; retain conditional interest in paying for a subscription. Add regression coverage for false budget matches, advice, copied evidence, ambiguous tasks, and commercial thresholds.
+- Bump saved analysis rules to version 8. Run `metis analyze` with the desired source/audience/window settings to refresh previous output. No new sources, credentials, paid services, or scheduled collectors are enabled.
+
 ## 0.7.0 — Broader source pilot
 
 - Add optional YouTube Data API comment collection with bounded discovery, curated-video support, original comment dates, and explicit quota/access failures. YouTube is disabled by default and needs an API key; no paid source is enabled.
